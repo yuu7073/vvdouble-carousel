@@ -487,15 +487,13 @@ function pinBar(x,lines,size,bx,y0,maxW,align,acc){
   const bh=lines.length*(size*1.42)+size*0.25;
   let bx0=align==='center'?(W-bw)/2:bx;
   x.fillStyle=mixWhite(acc,0.84); x.fillRect(bx0,y0,bw,bh);
-  const prot=Math.round(bh*0.72); /* 伸出長度,跟著色條高度走 */
   x.strokeStyle=acc; x.lineWidth=6; x.fillStyle=acc;
-  const lx=bx0+3, rx=bx0+bw-3;
-  /* 左:圓點在上,線往下穿進色條過半 */
-  x.beginPath(); x.moveTo(lx,y0-prot); x.lineTo(lx,y0+bh*0.58); x.stroke();
-  x.beginPath(); x.arc(lx,y0-prot,11,0,7); x.fill();
-  /* 右:線從色條內往下伸出,圓點緊貼線尾 */
-  x.beginPath(); x.moveTo(rx,y0+bh*0.42); x.lineTo(rx,y0+bh+prot); x.stroke();
-  x.beginPath(); x.arc(rx,y0+bh+prot,11,0,7); x.fill();
+  /* 左線與右線:跟色條等高,貼齊左右緣 */
+  x.beginPath(); x.moveTo(bx0,y0); x.lineTo(bx0,y0+bh); x.stroke();
+  x.beginPath(); x.moveTo(bx0+bw,y0); x.lineTo(bx0+bw,y0+bh); x.stroke();
+  /* 圓點:左上角、右下角 */
+  x.beginPath(); x.arc(bx0,y0,12,0,7); x.fill();
+  x.beginPath(); x.arc(bx0+bw,y0+bh,12,0,7); x.fill();
   x.fillStyle=barTextColor(acc); setLS(x,3);
   let ty=y0+size*1.08;
   lines.forEach(l=>{
@@ -541,7 +539,7 @@ function rI(x,s,m,acc){
     const T=fit(x,s.title,z=>'900 '+z+'px "Noto Sans TC"',46,38,mw-28,2);
     x.font='400 36px "Noto Sans TC"'; const BL=wrap(x,s.body,mw);
     const barH=T.L.length*(T.s*1.42)+T.s*0.25;
-    const pinDrop=Math.round(barH*0.72)+24; /* 右側線+圓點伸出量,內文要讓開 */
+    const pinDrop=24; /* 右下圓點半徑+間距,內文要讓開 */
     let barY=Math.max(340,H-170-(BL.length*66+56+barH+pinDrop));
     pinBar(x,T.L,T.s,SAFE-14,barY,mw+28,'left',acc);
     shadowOn(x);
@@ -555,7 +553,7 @@ function rI(x,s,m,acc){
     shadowOn(x); x.textAlign='center';
     x.font='500 38px "Noto Sans TC"'; x.fillStyle='#fff';
     const barH=Q.L.length*(Q.s*1.42)+Q.s*0.25;
-    let y=190+barH+Math.round(barH*0.72)+100;
+    let y=190+barH+110;
     wrap(x,s.lines,W-SAFE*2).forEach(l=>{ x.fillText(l,W/2,y); y+=72; });
     x.textAlign='left'; shadowOff(x);
   }
