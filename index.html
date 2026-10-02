@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VV DOUBLE 輪播貼文產生器</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Noto+Serif+TC:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:"Noto Sans TC",sans-serif; background:#F2F0EC; color:#2B2B2B; padding:20px; }
+  .wrap { max-width:1100px; margin:0 auto; }
+  h1 { font-size:22px; font-weight:900; letter-spacing:1px; margin-bottom:4px; }
+  .tagline { font-size:13px; color:#8A8378; margin-bottom:20px; }
+  .card { background:#fff; border-radius:14px; padding:20px; margin-bottom:16px; box-shadow:0 1px 4px rgba(0,0,0,0.06); }
+  .card h2 { font-size:15px; font-weight:700; margin-bottom:14px; color:#3A2E26; }
+  label { display:block; font-size:13px; font-weight:500; color:#6B6459; margin:12px 0 5px; }
+  input[type=text], input[type=password], textarea, select {
+    width:100%; padding:10px 12px; border:1px solid #DDD6CC; border-radius:8px;
+    font-size:14px; font-family:inherit; background:#FCFBF9;
+  }
+  input[type=color]{ width:52px; height:38px; border:1px solid #DDD6CC; border-radius:8px; background:#FCFBF9; padding:2px; cursor:pointer; }
+  textarea { resize:vertical; min-height:64px; line-height:1.6; }
+  input:focus, textarea:focus, select:focus { outline:none; border-color:#A97C50; }
+  .row { display:flex; gap:12px; flex-wrap:wrap; }
+  .row > div { flex:1; min-width:130px; }
+  .btn { display:inline-block; border:none; border-radius:8px; padding:11px 22px; font-size:14px;
+    font-weight:700; cursor:pointer; font-family:inherit; }
+  .btn-main { background:#3A2E26; color:#fff; }
+  .btn-main:disabled { background:#B8B0A4; cursor:not-allowed; }
+  .btn-sub { background:#EDE7DD; color:#3A2E26; }
+  .btn-sm { padding:7px 14px; font-size:13px; }
+  .tpl-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:10px; margin-top:6px; }
+  .tpl-item { border:2px solid #DDD6CC; border-radius:10px; padding:10px 8px; text-align:center;
+    cursor:pointer; font-size:13px; font-weight:500; background:#FCFBF9; }
+  .tpl-item .swatch { height:44px; border-radius:6px; margin-bottom:8px; }
+  .tpl-item.active { border-color:#3A2E26; background:#F3EEE6; font-weight:700; }
+  #status { font-size:13px; margin-left:12px; color:#A97C50; }
+  #slides { display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:16px; }
+  .slide-card { background:#fff; border-radius:14px; padding:14px; box-shadow:0 1px 4px rgba(0,0,0,0.06); }
+  .slide-card canvas { width:100%; border-radius:8px; display:block; background:#111; }
+  .slide-card .fields { margin-top:8px; }
+  .slide-card .fields input, .slide-card .fields textarea { font-size:13px; padding:8px 10px; margin-bottom:6px; }
+  .slide-card .tools { display:flex; gap:8px; margin-top:6px; flex-wrap:wrap; align-items:center; }
+  .slide-card .tools label.filebtn { display:inline-block; margin:0; background:#EDE7DD; color:#3A2E26;
+    border-radius:8px; padding:7px 14px; font-size:13px; font-weight:700; cursor:pointer; }
+  .imgctl { margin-top:8px; padding:10px; background:#F7F4EF; border-radius:8px; }
+  .imgctl .rrow { display:flex; align-items:center; gap:8px; margin-bottom:4px; }
+  .imgctl .rrow span { font-size:12px; color:#6B6459; width:34px; flex-shrink:0; }
+  .imgctl input[type=range]{ flex:1; accent-color:#A97C50; }
+  .slide-num { font-size:12px; font-weight:700; color:#A97C50; margin-bottom:8px; letter-spacing:2px; }
+  .hidden { display:none; }
+  #capbox textarea { min-height:130px; }
+  .hint { font-size:12px; color:#9C948A; margin-top:6px; line-height:1.7; }
+  .acc-row { display:flex; align-items:center; gap:10px; margin-top:6px; }
+  .acc-row .hint { margin-top:0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>VV DOUBLE 輪播貼文產生器</h1>
+  <div class="tagline">知識型引流貼文 · AI 撰稿 + 文字排版 · IG 4:5(1080×1350)</div>
+
+  <div class="card">
+    <h2>1. API Key</h2>
+    <input type="password" id="apikey" placeholder="貼上 Anthropic API Key(只存在這個分頁,關閉即清除)">
+  </div>
+
+  <div class="card">
+    <h2>2. 貼文設定</h2>
+    <label>主題(想講什麼)</label>
+    <textarea id="topic" placeholder="例:大尺碼牛仔褲怎麼挑、夏天不悶熱的面料知識、涼感外套的三種穿法"></textarea>
+    <label>補充資料(選填:商品資訊、想強調的重點、數據)</label>
+    <textarea id="extra" placeholder="有的話貼進來,AI 會寫進內文"></textarea>
+    <div class="row">
+      <div>
+        <label>引流切角</label>
+        <select id="hook">
+          <option value="auto" selected>自由發揮(AI 自選)</option>
+          <option value="data">權威數據型(研究指出 + 數字鉤子)</option>
+          <option value="pain">痛點解方型(想要A又想要B?)</option>
+          <option value="name">造詞命名型(XX公式、XX系穿搭)</option>
+          <option value="scene">場景 LOOK 型(通勤/約會/旅行)</option>
+          <option value="myth">破除迷思型(你以為的都是錯的)</option>
+          <option value="save">收藏清單型(先收藏!對照著用)</option>
+          <option value="share">分享觸發型(tag 那個需要的朋友)</option>
+        </select>
+      </div>
+      <div>
+        <label>內文頁數(不含封面與結尾)</label>
+        <select id="pages">
+          <option value="4">4 頁(共 6 張)</option>
+          <option value="5" selected>5 頁(共 7 張)</option>
+          <option value="6">6 頁(共 8 張)</option>
+        </select>
+      </div>
+      <div>
+        <label>期數 VOL.</label>
+        <input type="text" id="vol" value="01">
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label>左上品牌字</label>
+        <input type="text" id="brand" value="VV DOUBLE">
+      </div>
+      <div>
+        <label>品牌小字 / 帳號</label>
+        <input type="text" id="sub" value="@VVDOUBLEOFFICIAL">
+      </div>
+      <div>
+        <label>右下滑動提示字</label>
+        <input type="text" id="footerText" value="往右滑看更多 →">
+      </div>
+      <div>
+        <label>最後一頁右下字</label>
+        <input type="text" id="endFooterText" value="追蹤 @vvdoubleofficial 看更多">
+      </div>
+    </div>
+    <label>版型</label>
+    <div class="tpl-grid" id="tplGrid"></div>
+    <div class="acc-row">
+      <input type="color" id="accColor" value="#C9A45C">
+      <span class="hint">強調色(A 金線小標 / B 反白底色 / D 跳色 / H 底線),切換版型會回到該版型預設,之後可自由改</span>
+    </div>
+    <div style="margin-top:18px">
+      <button class="btn btn-main" id="genBtn">AI 生成貼文</button>
+      <button class="btn btn-sub" id="demoBtn">載入範例(不耗 API)</button>
+      <span id="status"></span>
+    </div>
+  </div>
+
+  <div id="result" class="hidden">
+    <div class="card" id="capbox">
+      <h2>IG 發文文案</h2>
+      <textarea id="caption"></textarea>
+      <div style="margin-top:10px">
+        <button class="btn btn-sub btn-sm" id="copyCap">複製文案</button>
+        <button class="btn btn-main btn-sm" id="dlAll">下載全部圖片</button>
+      </div>
+      <div class="hint">文字改了即時重畫。每頁可上傳背景照片,並用滑桿調整縮放與位置。標題或內文用「」框住的詞,在 D 版型會自動跳色。</div>
+    </div>
+    <div id="slides"></div>
+  </div>
+</div>
+
+<script>
+/* ================= 基本設定 ================= */
+const W = 1080, H = 1350, SAFE = 120;
+const MODEL = 'claude-sonnet-4-6';
+
+const THEMES = {
+  A: { name:'深夜雜誌', sw:'linear-gradient(135deg,#000,#3a332b)', acc:'#C9A45C' },
+  B: { name:'螢光筆反白', sw:'linear-gradient(135deg,#9c9c9c 55%,#FFE45E 55%)', acc:'#FFE45E' },
+  D: { name:'關鍵字跳色', sw:'linear-gradient(135deg,#8F8172 55%,#FF6A4D 55%)', acc:'#FF6A4D' },
+  H: { name:'底線強調', sw:'linear-gradient(180deg,#8F8172 70%,#FFD84D 70%)', acc:'#FFD84D' }
+};
+
+let state = { tpl:'A', acc:THEMES.A.acc, slides:[], caption:'' };
+
+/* ================= 版型選擇 UI ================= */
+const tplGrid = document.getElementById('tplGrid');
+Object.keys(THEMES).forEach(key => {
+  const d = document.createElement('div');
+  d.className = 'tpl-item' + (key === state.tpl ? ' active' : '');
+  d.dataset.key = key;
+  d.innerHTML = '<div class="swatch" style="background:' + THEMES[key].sw + '"></div>' + THEMES[key].name;
+  d.addEventListener('click', () => {
+    state.tpl = key;
+    state.acc = THEMES[key].acc;
+    document.getElementById('accColor').value = normHex(state.acc);
+    document.querySelectorAll('.tpl-item').forEach(el => el.classList.toggle('active', el.dataset.key === key));
+    renderAll();
+  });
+  tplGrid.appendChild(d);
+});
+function normHex(c){ return c.length===7?c:c; }
+document.getElementById('accColor').addEventListener('input', e => { state.acc = e.target.value; renderAll(); });
+['vol','brand','sub','footerText','endFooterText'].forEach(id =>
+  document.getElementById(id).addEventListener('input', renderAll));
+
+/* ================= 共用繪圖工具 ================= */
+function setLS(x,v){ try{ x.letterSpacing = v+'px'; }catch(e){} }
+function shadowOn(x){ x.shadowColor='rgba(0,0,0,0.45)'; x.shadowBlur=10; x.shadowOffsetY=2; }
+function shadowOff(x){ x.shadowColor='transparent'; x.shadowBlur=0; x.shadowOffsetY=0; }
+function wrap(x,t,mw){
+  const o=[];
+  String(t||'').split('\n').forEach(r=>{
+    let l='';
+    for(const c of r){ if(l && x.measureText(l+c).width>mw){ o.push(l); l=c; } else l+=c; }
+    o.push(l);
+  });
+  return o.filter(l=>l!=='');
+}
+function fit(x,t,mk,base,min,mw,maxLines){
+  for(let s=base;s>=min;s-=4){ x.font=mk(s); const L=wrap(x,t,mw); if(L.length<=maxLines) return {s,L}; }
+  x.font=mk(min); return {s:min,L:wrap(x,t,mw)};
+}
+function meta(){
+  return {
+    vol: document.getElementById('vol').value.trim() || '01',
+    brand: document.getElementById('brand').value.trim() || 'VV DOUBLE',
+    sub: document.getElementById('sub').value.trim() || '@VVDOUBLEOFFICIAL',
+    ft: document.getElementById('footerText').value.trim() || '往右滑看更多 →',
+    eft: document.getElementById('endFooterText').value.trim() || '追蹤看更多'
+  };
+}
+/* 背景圖:cover-fit × 縮放 × 位移 */
+function drawImg(x,s){
+  const img=s.img; if(!img) return false;
+  const sc=(s.scale||100)/100;
+  const r=Math.max(W/img.width,H/img.height)*sc;
+  const w=img.width*r, h=img.height*r;
+  const ox=((s.ox||0)/100)*(w-W)/2, oy=((s.oy||0)/100)*(h-H)/2;
+  x.drawImage(img,(W-w)/2+ox,(H-h)/2+oy,w,h);
+  return true;
+}
+function header(x,m,color,accent,withShadow){
+  if(withShadow) shadowOn(x);
+  x.textAlign='left'; x.fillStyle=color; setLS(x,4); x.font='900 34px "Noto Sans TC"'; x.fillText(m.brand,SAFE,116);
+  setLS(x,6); x.font='500 19px "Noto Sans TC"'; x.fillStyle=accent; x.fillText(m.sub,SAFE+2,149);
+  setLS(x,3); x.fillStyle=color; x.font='400 32px "Noto Serif TC"'; x.textAlign='right'; x.fillText('VOL. '+m.vol,W-SAFE,126);
+  x.textAlign='left'; setLS(x,0); if(withShadow) shadowOff(x);
+}
+function footer(x,m,isLast,color,center,withShadow){
+  if(withShadow) shadowOn(x);
+  x.textAlign=center?'center':'right'; setLS(x,4); x.fillStyle=color; x.font='400 30px "Noto Sans TC"';
+  x.fillText(isLast?m.eft:m.ft, center?W/2:W-SAFE, H-80);
+  x.textAlign='left'; setLS(x,0); if(withShadow) shadowOff(x);
+}
+/* 關鍵字跳色:逐字繪製,「」內用強調色 */
+function drawRich(x,line,sx,y,base,accent,st){
+  let px=sx;
+  for(const ch of line){
+    if(ch==='「'){ st.q=true; x.fillStyle=accent; }
+    else if(ch==='」'){ x.fillStyle=accent; }
+    else x.fillStyle=st.q?accent:base;
+    x.fillText(ch,px,y); px+=x.measureText(ch).width;
+    if(ch==='」') st.q=false;
+  }
+}
+
+/* ================= 版型 A 深夜雜誌 ================= */
+function bgA(x,s){
+  x.fillStyle='#0C0C0C'; x.fillRect(0,0,W,H);
+  if(drawImg(x,s)){
+    x.fillStyle='rgba(0,0,0,0.5)'; x.fillRect(0,0,W,H);
+    const g=x.createLinearGradient(0,H*0.38,0,H);
+    g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(0,0,0,0.85)');
+    x.fillStyle=g; x.fillRect(0,0,W,H);
+  } else {
+    const g=x.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,'rgba(70,62,52,0.5)'); g.addColorStop(1,'rgba(0,0,0,0)');
+    x.fillStyle=g; x.fillRect(0,0,W,H);
+  }
+}
+function rA(x,s,m,acc){
+  bgA(x,s); header(x,m,'#fff',acc);
+  const mw=W-SAFE*2;
+  if(s.type==='cover'){
+    const T=fit(x,(s.title1||'')+'\n'+(s.title2||''),z=>'900 '+z+'px "Noto Serif TC"',96,60,mw,3);
+    x.font='400 38px "Noto Sans TC"'; const SL=wrap(x,s.subtitle,mw);
+    let y=H-210-(140+T.L.length*T.s*1.26+46+SL.length*66)+60;
+    if(y<300) y=300;
+    setLS(x,12); x.font='500 30px "Noto Sans TC"'; x.fillStyle=acc; x.fillText(s.tag||'',SAFE,y); setLS(x,0);
+    y+=140; /* 小標與大標拉開距離 */
+    x.font='900 '+T.s+'px "Noto Serif TC"'; x.fillStyle='#fff';
+    T.L.forEach(l=>{ x.fillText(l,SAFE,y); y+=T.s*1.26; }); y+=26;
+    x.font='400 38px "Noto Sans TC"'; x.fillStyle='#C8C8C8';
+    SL.forEach(l=>{ x.fillText(l,SAFE,y); y+=66; });
+  } else if(s.type==='content'){
+    const T=fit(x,s.title,z=>'900 '+z+'px "Noto Serif TC"',68,48,mw,2);
+    x.font='400 36px "Noto Sans TC"'; const BL=wrap(x,s.body,mw);
+    let y=Math.max(330,H-200-(T.L.length*T.s*1.3+72+BL.length*70));
+    x.font='900 '+T.s+'px "Noto Serif TC"'; x.fillStyle='#fff';
+    T.L.forEach(l=>{ x.fillText(l,SAFE,y); y+=T.s*1.3; });
+    x.fillStyle=acc; x.fillRect(SAFE+2,y-38,74,4); y+=52;
+    x.font='400 36px "Noto Sans TC"'; x.fillStyle='#E6E6E6';
+    BL.forEach(l=>{ x.fillText(l,SAFE,y); y+=70; });
+  } else {
+    x.font='400 40px "Noto Sans TC"'; const LL=wrap(x,s.lines,mw);
+    const Q=fit(x,s.question,z=>'900 '+z+'px "Noto Serif TC"',58,44,mw,2);
+    let y=Math.max(360,H-210-(LL.length*78+56+Q.L.length*Q.s*1.34));
+    x.font='400 40px "Noto Sans TC"'; x.fillStyle='#E6E6E6';
+    LL.forEach(l=>{ x.fillText(l,SAFE,y); y+=78; }); y+=48;
+    x.font='900 '+Q.s+'px "Noto Serif TC"'; x.fillStyle=acc;
+    Q.L.forEach(l=>{ x.fillText(l,SAFE,y); y+=Q.s*1.34; });
+  }
+  footer(x,m,s.type==='ending','#9E9E9E');
+}
+
+/* ================= 照片系共用底(B/D/H 無圖時) ================= */
+function bgPhoto(x,s,dim){
+  if(!drawImg(x,s)){
+    const g=x.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,'#C9BBA8'); g.addColorStop(1,'#8F8172');
+    x.fillStyle=g; x.fillRect(0,0,W,H);
+  }
+  if(dim){
+    const d=x.createLinearGradient(0,H*0.35,0,H);
+    d.addColorStop(0,'rgba(0,0,0,0.06)'); d.addColorStop(1,'rgba(0,0,0,0.38)');
+    x.fillStyle=d; x.fillRect(0,0,W,H);
+  }
+}
+
+/* ================= 版型 B 螢光筆反白 ================= */
+function textOnBar(x,acc){ /* 底色亮→黑字,底色暗→白字 */
+  const r=parseInt(acc.slice(1,3),16), g=parseInt(acc.slice(3,5),16), b=parseInt(acc.slice(5,7),16);
+  return (0.299*r+0.587*g+0.114*b)>150 ? '#141414' : '#FFFFFF';
+}
+function hiLine(x,l,cx,y,size,bar,txt){
+  const w=x.measureText(l).width;
+  x.fillStyle=bar; x.fillRect(cx-w/2-20,y-size*0.86,w+40,size*1.1);
+  x.fillStyle=txt; x.fillText(l,cx,y);
+}
+function rB(x,s,m,acc){
+  bgPhoto(x,s,false);
+  if(s.img){ x.fillStyle='rgba(0,0,0,0.12)'; x.fillRect(0,0,W,H); }
+  header(x,m,'#fff',acc,true);
+  const mw=W-SAFE*2; const barTxt=textOnBar(x,acc);
+  x.textAlign='center';
+  if(s.type==='cover'){
+    x.font='700 40px "Noto Sans TC"'; const TAGL=wrap(x,s.tag||'',mw);
+    setLS(x,2);
+    const T=fit(x,(s.title1||'')+'\n'+(s.title2||''),z=>'900 '+z+'px "Noto Sans TC"',76,54,mw,3);
+    x.font='700 44px "Noto Sans TC"'; const SL=wrap(x,s.subtitle,mw);
+    const total=TAGL.length*70+100+T.L.length*76*1.62+90+SL.length*76;
+    let y=Math.max(430,(H-total)/2+140);
+    /* 小標:白字加陰影,不反色 */
+    shadowOn(x); setLS(x,4); x.font='700 40px "Noto Sans TC"'; x.fillStyle='#fff';
+    TAGL.forEach(l=>{ x.fillText(l,W/2,y); y+=70; }); shadowOff(x);
+    y+=100; setLS(x,2);
+    x.font='900 '+T.s+'px "Noto Sans TC"';
+    T.L.forEach(l=>{ hiLine(x,l,W/2,y,T.s,acc,barTxt); y+=T.s*1.62; });
+    y+=76; setLS(x,3);
+    shadowOn(x); x.font='700 44px "Noto Sans TC"'; x.fillStyle='#fff';
+    SL.forEach(l=>{ x.fillText(l,W/2,y); y+=76; });
+    shadowOff(x); setLS(x,0);
+  } else if(s.type==='content'){
+    x.font='700 46px "Noto Sans TC"';
+    const T=fit(x,s.title,z=>'700 '+z+'px "Noto Sans TC"',46,38,mw-80,2);
+    x.font='400 36px "Noto Sans TC"'; const BL=wrap(x,s.body,mw-40);
+    let y=Math.max(480,H-230-(T.L.length*T.s*2.4+64+BL.length*64));
+    setLS(x,2); x.font='700 '+T.s+'px "Noto Sans TC"';
+    T.L.forEach(l=>{ hiLine(x,l,W/2,y,T.s,acc,barTxt); y+=T.s*2.4; });
+    y+=44; shadowOn(x); setLS(x,1);
+    x.font='400 36px "Noto Sans TC"'; x.fillStyle='#fff';
+    BL.forEach(l=>{ x.fillText(l,W/2,y); y+=64; });
+    shadowOff(x); setLS(x,0);
+  } else {
+    x.font='400 38px "Noto Sans TC"'; const LL=wrap(x,s.lines,mw-40);
+    const Q=fit(x,s.question,z=>'900 '+z+'px "Noto Sans TC"',48,38,mw-80,2);
+    let y=Math.max(480,H-230-(LL.length*70+80+Q.L.length*Q.s*1.9));
+    shadowOn(x); setLS(x,1); x.font='400 38px "Noto Sans TC"'; x.fillStyle='#fff';
+    LL.forEach(l=>{ x.fillText(l,W/2,y); y+=70; }); shadowOff(x);
+    y+=70; setLS(x,2); x.font='900 '+Q.s+'px "Noto Sans TC"';
+    Q.L.forEach(l=>{ hiLine(x,l,W/2,y,Q.s,acc,barTxt); y+=Q.s*1.9; });
+    setLS(x,0);
+  }
+  x.textAlign='left';
+  footer(x,m,s.type==='ending','#fff',true,true);
+}
+
+/* ================= 版型 D 關鍵字跳色 ================= */
+function rD(x,s,m,acc){
+  bgPhoto(x,s,true);
+  header(x,m,'#fff',acc,true);
+  const mw=W-SAFE*2;
+  shadowOn(x);
+  if(s.type==='cover'){
+    const full=(s.title1||'')+'\n'+(s.title2||'')+(s.subtitle?('\n'+s.subtitle):'');
+    const T=fit(x,(s.title1||'')+'\n'+(s.title2||''),z=>'900 '+z+'px "Noto Sans TC"',68,50,mw,4);
+    x.font='400 38px "Noto Sans TC"'; const SL=wrap(x,s.subtitle,mw);
+    const total=T.L.length*T.s*1.5+40+SL.length*66+110;
+    let y=Math.max(420,(H-total)/2+130);
+    setLS(x,8); x.font='500 28px "Noto Sans TC"'; x.fillStyle='#fff'; x.fillText(s.tag||'',SAFE,y-90); setLS(x,0);
+    x.font='900 '+T.s+'px "Noto Sans TC"';
+    const st={q:false};
+    T.L.forEach(l=>{ drawRich(x,l,SAFE,y,'#fff',acc,st); y+=T.s*1.5; });
+    y+=28;
+    x.font='400 38px "Noto Sans TC"'; x.fillStyle='#F0F0F0';
+    SL.forEach(l=>{ x.fillText(l,SAFE,y); y+=66; });
+    /* swipe 膠囊 */
+    y+=44;
+    shadowOff(x);
+    x.strokeStyle='#fff'; x.lineWidth=3; setLS(x,2); x.font='700 30px "Noto Sans TC"';
+    const sw=x.measureText('swipe >').width;
+    x.beginPath(); x.roundRect(SAFE,y-40,sw+56,64,32); x.stroke();
+    x.fillStyle='#fff'; x.fillText('swipe >',SAFE+28,y+6); setLS(x,0);
+    shadowOn(x);
+  } else if(s.type==='content'){
+    const T=fit(x,s.title,z=>'900 '+z+'px "Noto Sans TC"',60,44,mw,2);
+    x.font='400 36px "Noto Sans TC"'; const BL=wrap(x,s.body,mw-40);
+    let y=Math.max(400,H-210-(T.L.length*T.s*1.4+70+BL.length*72));
+    x.font='900 '+T.s+'px "Noto Sans TC"';
+    const st={q:false};
+    T.L.forEach(l=>{ drawRich(x,l,SAFE,y,'#fff',acc,st); y+=T.s*1.4; });
+    y+=44;
+    x.font='400 36px "Noto Sans TC"';
+    const st2={q:false};
+    BL.forEach(l=>{ drawRich(x,l,SAFE,y,'#F0F0F0',acc,st2); y+=72; });
+  } else {
+    x.font='400 38px "Noto Sans TC"'; const LL=wrap(x,s.lines,mw-40);
+    const Q=fit(x,s.question,z=>'900 '+z+'px "Noto Sans TC"',54,42,mw,2);
+    let y=Math.max(420,H-210-(LL.length*72+70+Q.L.length*Q.s*1.4));
+    x.font='400 38px "Noto Sans TC"'; x.fillStyle='#F0F0F0';
+    LL.forEach(l=>{ x.fillText(l,SAFE,y); y+=72; });
+    y+=56;
+    x.font='900 '+Q.s+'px "Noto Sans TC"';
+    const st={q:false};
+    Q.L.forEach(l=>{ drawRich(x,l,SAFE,y,'#fff',acc,st); y+=Q.s*1.4; });
+  }
+  shadowOff(x);
+  footer(x,m,s.type==='ending','#fff',false,true);
+}
+
+/* ================= 版型 H 底線強調 ================= */
+function rH(x,s,m,acc){
+  bgPhoto(x,s,true);
+  header(x,m,'#fff',acc,true);
+  const mw=W-SAFE*2;
+  shadowOn(x);
+  function underTitle(T,y0){
+    let y=y0; x.font='900 '+T.s+'px "Noto Sans TC"';
+    T.L.forEach(l=>{
+      const w=x.measureText(l).width;
+      x.fillStyle='#fff'; x.fillText(l,SAFE,y);
+      shadowOff(x); x.fillStyle=acc; x.fillRect(SAFE,y+16,w,Math.max(6,Math.round(T.s*0.11))); shadowOn(x);
+      y+=T.s*1.5;
+    });
+    return y;
+  }
+  if(s.type==='cover'){
+    const T=fit(x,(s.title1||'')+'\n'+(s.title2||''),z=>'900 '+z+'px "Noto Sans TC"',86,56,mw,3);
+    x.font='400 38px "Noto Sans TC"'; const SL=wrap(x,s.subtitle,mw);
+    let y=H-230-(104+T.L.length*T.s*1.5+40+SL.length*66)+60;
+    if(y<300) y=300;
+    setLS(x,10); x.font='500 30px "Noto Sans TC"'; x.fillStyle='#fff'; x.fillText(s.tag||'',SAFE,y); setLS(x,0);
+    y+=104;
+    y=underTitle(T,y); y+=16;
+    x.font='400 38px "Noto Sans TC"'; x.fillStyle='#EFEFEF';
+    SL.forEach(l=>{ x.fillText(l,SAFE,y); y+=66; });
+  } else if(s.type==='content'){
+    const T=fit(x,s.title,z=>'900 '+z+'px "Noto Sans TC"',64,46,mw,2);
+    x.font='400 36px "Noto Sans TC"'; const BL=wrap(x,s.body,mw);
+    let y=Math.max(360,H-200-(T.L.length*T.s*1.5+56+BL.length*70));
+    y=underTitle(T,y); y+=28;
+    x.font='400 36px "Noto Sans TC"';
+    BL.forEach(l=>{
+      if(l.startsWith('✓')){ x.fillStyle=acc; x.fillText('✓',SAFE,y); x.fillStyle='#F0F0F0'; x.fillText(l.slice(1).trim(),SAFE+46,y); }
+      else { x.fillStyle='#F0F0F0'; x.fillText(l,SAFE,y); }
+      y+=70;
+    });
+  } else {
+    x.font='400 38px "Noto Sans TC"'; const LL=wrap(x,s.lines,mw);
+    const Q=fit(x,s.question,z=>'900 '+z+'px "Noto Sans TC"',56,44,mw,2);
+    let y=Math.max(400,H-210-(LL.length*72+70+Q.L.length*Q.s*1.5));
+    x.fillStyle='#F0F0F0'; x.font='400 38px "Noto Sans TC"';
+    LL.forEach(l=>{ x.fillText(l,SAFE,y); y+=72; });
+    y+=56;
+    y=underTitle(Q,y);
+  }
+  shadowOff(x);
+  footer(x,m,s.type==='ending','#fff',false,true);
+}
+
+/* ================= 渲染入口 ================= */
+const RENDER={A:rA,B:rB,D:rD,H:rH};
+function renderSlide(i){
+  const s=state.slides[i];
+  const c=document.getElementById('cv'+i);
+  if(!c) return;
+  const x=c.getContext('2d');
+  x.clearRect(0,0,W,H);
+  RENDER[state.tpl](x,s,meta(),state.acc);
+}
+function renderAll(){ state.slides.forEach((_,i)=>renderSlide(i)); }
+
+/* ================= 編輯卡片 UI ================= */
+function field(ph,val,key,i,isArea){
+  const el=document.createElement(isArea?'textarea':'input');
+  if(!isArea) el.type='text';
+  el.placeholder=ph; el.value=val||'';
+  el.addEventListener('input',()=>{ state.slides[i][key]=el.value; renderSlide(i); });
+  return el;
+}
+function rangeRow(label,min,max,val,cb){
+  const row=document.createElement('div'); row.className='rrow';
+  const sp=document.createElement('span'); sp.textContent=label; row.appendChild(sp);
+  const r=document.createElement('input'); r.type='range'; r.min=min; r.max=max; r.value=val;
+  r.addEventListener('input',()=>cb(parseInt(r.value)));
+  row.appendChild(r);
+  return row;
+}
+function buildEditor(){
+  const box=document.getElementById('slides');
+  box.innerHTML='';
+  state.slides.forEach((s,i)=>{
+    const card=document.createElement('div'); card.className='slide-card';
+    const num=document.createElement('div'); num.className='slide-num';
+    num.textContent='P'+(i+1)+' · '+(s.type==='cover'?'封面':s.type==='ending'?'結尾':'內文');
+    card.appendChild(num);
+    const c=document.createElement('canvas'); c.id='cv'+i; c.width=W; c.height=H;
+    card.appendChild(c);
+
+    const f=document.createElement('div'); f.className='fields';
+    if(s.type==='cover'){
+      f.appendChild(field('分類小標',s.tag,'tag',i));
+      f.appendChild(field('主標上行',s.title1,'title1',i));
+      f.appendChild(field('主標下行',s.title2,'title2',i));
+      f.appendChild(field('副標(換行分行)',s.subtitle,'subtitle',i,true));
+    } else if(s.type==='content'){
+      f.appendChild(field('本頁標題',s.title,'title',i));
+      f.appendChild(field('內文(換行分行)',s.body,'body',i,true));
+    } else {
+      f.appendChild(field('收尾文字(換行分行)',s.lines,'lines',i,true));
+      f.appendChild(field('互動提問',s.question,'question',i));
+    }
+    card.appendChild(f);
+
+    const tools=document.createElement('div'); tools.className='tools';
+    const fl=document.createElement('label'); fl.className='filebtn'; fl.textContent='上傳背景圖';
+    const fi=document.createElement('input'); fi.type='file'; fi.accept='image/*'; fi.style.display='none';
+    fi.addEventListener('change',()=>{
+      const file=fi.files[0]; if(!file) return;
+      const img=new Image();
+      img.onload=()=>{ s.img=img; s.scale=100; s.ox=0; s.oy=0;
+        ic.classList.remove('hidden'); syncRanges(); renderSlide(i); };
+      img.src=URL.createObjectURL(file);
+    });
+    fl.appendChild(fi); tools.appendChild(fl);
+
+    const rm=document.createElement('button'); rm.className='btn btn-sub btn-sm'; rm.textContent='移除圖';
+    rm.addEventListener('click',()=>{ s.img=null; ic.classList.add('hidden'); renderSlide(i); });
+    tools.appendChild(rm);
+
+    const dl=document.createElement('button'); dl.className='btn btn-main btn-sm'; dl.textContent='下載此頁';
+    dl.addEventListener('click',()=>downloadSlide(i));
+    tools.appendChild(dl);
+    card.appendChild(tools);
+
+    /* 圖片縮放 / 位置控制 */
+    const ic=document.createElement('div'); ic.className='imgctl'+(s.img?'':' hidden');
+    let r1,r2,r3;
+    ic.appendChild(r1=rangeRow('縮放',100,250,s.scale||100,v=>{ s.scale=v; renderSlide(i); }));
+    ic.appendChild(r2=rangeRow('水平',-100,100,s.ox||0,v=>{ s.ox=v; renderSlide(i); }));
+    ic.appendChild(r3=rangeRow('垂直',-100,100,s.oy||0,v=>{ s.oy=v; renderSlide(i); }));
+    function syncRanges(){
+      r1.querySelector('input').value=s.scale||100;
+      r2.querySelector('input').value=s.ox||0;
+      r3.querySelector('input').value=s.oy||0;
+    }
+    card.appendChild(ic);
+    box.appendChild(card);
+  });
+  document.getElementById('result').classList.remove('hidden');
+  document.fonts.ready.then(renderAll);
+  renderAll();
+}
+
+/* ================= 下載 ================= */
+function downloadSlide(i){
+  const c=document.getElementById('cv'+i);
+  c.toBlob(blob=>{
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download='vvpost_vol'+meta().vol+'_'+String(i+1).padStart(2,'0')+'.jpg';
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),3000);
+  },'image/jpeg',0.92);
+}
+document.getElementById('dlAll').addEventListener('click',async()=>{
+  for(let i=0;i<state.slides.length;i++){ downloadSlide(i); await new Promise(r=>setTimeout(r,450)); }
+});
+document.getElementById('copyCap').addEventListener('click',()=>{
+  navigator.clipboard.writeText(document.getElementById('caption').value).then(()=>setStatus('文案已複製'));
+});
+document.getElementById('caption').addEventListener('input',e=>state.caption=e.target.value);
+
+/* ================= AI 生成 ================= */
+function setStatus(t){ document.getElementById('status').textContent=t; }
+
+const HOOKS={
+  auto:'自由發揮:依主題選擇最適合的切入方式',
+  data:'權威數據型:封面用「研究指出」「數據顯示」加上一個具體、反直覺的數字當鉤子;引用通則時要在文中標明屬一般研究通則',
+  pain:'痛點解方型:封面第一行用二選一痛點問句開場(想要A又想要B?),第二行給出解方方向',
+  name:'造詞命名型:為這套方法發明一個好記的名字(例:XX公式、XX系穿搭),放進封面標題並用「」框起來,全篇圍繞這個詞展開',
+  scene:'場景 LOOK 型:每一頁內文對應一個生活場景(通勤、約會、出遊、居家等),標題格式為「LOOK N 場景名」,講同一主題在該場景的應用',
+  myth:'破除迷思型:封面丟出一個大家普遍相信的迷思,內文每頁破解一個相關誤解,語氣溫和不說教',
+  save:'收藏清單型:封面直接下「先收藏」指令,內文寫成可以對照執行的清單,多用「✓ 」開頭的條列行',
+  share:'分享觸發型:封面或結尾放一句會讓人想 tag 朋友的話,情緒共鳴優先,結尾提問設計成適合在留言 tag 人的形式'
+};
+
+function buildPrompt(){
+  const n=document.getElementById('pages').value;
+  const topic=document.getElementById('topic').value.trim();
+  const extra=document.getElementById('extra').value.trim();
+  const hook=HOOKS[document.getElementById('hook').value];
+  return '你是台灣大尺碼女裝品牌 VV DOUBLE 的社群內容編輯。品牌 slogan 是「大尺碼不是特例,而是我的日常」,受眾是棉花糖女孩。請為 Instagram 知識型輪播貼文撰寫內容,目的是引流與收藏。\n\n'
+  + '主題:' + topic + '\n'
+  + (extra?('補充資料:'+extra+'\n'):'')
+  + '引流切角:' + hook + '\n'
+  + '\n規則:\n'
+  + '1. 只回傳 JSON,不要任何其他文字、說明或 markdown 符號\n'
+  + '2. 全部使用繁體中文(台灣用語),語氣口語、溫暖,像朋友在分享,不生硬\n'
+  + '3. 嚴格禁止出現破折號「——」,嚴格禁止提及任何其他品牌名稱\n'
+  + '4. 排版限制:每一行文字不超過 20 個中文字,body 與 lines 欄位用換行符號 \\n 分行\n'
+  + '5. 內文共 ' + n + ' 頁,每頁只講一個重點;每頁標題不超過 14 字;每頁 body 為 4 到 6 行\n'
+  + '6. 條列式重點的行可以用「✓ 」開頭\n'
+  + '7. 標題或內文中最關鍵的造詞或概念,可以用「」框起來(排版會自動強調),每頁最多一組\n'
+  + '8. caption 是 IG 發文文案,150 字內,口語有 hook,結尾附 5 個 hashtag,必含 #VVDOUBLE 與 #大尺碼不是特例\n'
+  + '9. 反身材焦慮鐵則(最高優先):絕對不販賣身材焦慮。禁止把身材描述成問題、缺點或需要被解決的東西;禁止用恐懼或羞恥感當 hook;禁止出現「顯胖、遮肉、藏肉、修飾缺點、拯救身材、掰掰袖、穿錯很可怕」這類字眼;「顯瘦」不得當成主要賣點。一律改用正面框架:舒適、合身、自在、好活動、懂你的版型,核心觀念是衣服來配合人,不是人遷就衣服\n\n'
+  + 'JSON 格式:\n'
+  + '{"caption":"IG發文文案","cover":{"tag":"分類小標8字內","title1":"主標上行14字內","title2":"主標下行14字內","subtitle":"副標\\n可分兩行"},"slides":[{"title":"頁標題","body":"第一行\\n第二行\\n第三行\\n第四行"}],"ending":{"lines":"收尾文字\\n共3到5行","question":"結尾互動提問一句"}}';
+}
+
+async function generate(){
+  const key=document.getElementById('apikey').value.trim();
+  if(key) sessionStorage.setItem('anthropic_api_key',key);
+  const saved=sessionStorage.getItem('anthropic_api_key');
+  if(!saved){ setStatus('請先貼上 API Key'); return; }
+  if(!document.getElementById('topic').value.trim()){ setStatus('請先填主題'); return; }
+  const btn=document.getElementById('genBtn');
+  btn.disabled=true; setStatus('AI 撰稿中,約 20 到 40 秒…');
+  try{
+    const headers=new Headers();
+    headers.append('Content-Type','application/json');
+    headers.append('x-api-key',saved);
+    headers.append('anthropic-version','2023-06-01');
+    headers.append('anthropic-dangerous-direct-browser-access','true');
+    const res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',headers,
+      body:JSON.stringify({ model:MODEL, max_tokens:4000, messages:[{role:'user',content:buildPrompt()}] })
+    });
+    const data=await res.json();
+    if(data.error) throw new Error(data.error.message||'API 錯誤');
+    const text=(data.content||[]).filter(c=>c.type==='text').map(c=>c.text).join('\n');
+    const clean=text.replace(/```json|```/g,'').trim();
+    const j=JSON.parse(clean);
+    applyResult(j);
+    setStatus('完成!往下捲動編輯與下載');
+  }catch(err){
+    console.error(err);
+    setStatus('失敗:'+err.message+'(可打開 console 看詳情)');
+  }finally{
+    btn.disabled=false;
+  }
+}
+function applyResult(j){
+  state.caption=j.caption||'';
+  document.getElementById('caption').value=state.caption;
+  state.slides=[];
+  state.slides.push({type:'cover',tag:j.cover.tag,title1:j.cover.title1,title2:j.cover.title2,subtitle:j.cover.subtitle,img:null,scale:100,ox:0,oy:0});
+  (j.slides||[]).forEach(s=>state.slides.push({type:'content',title:s.title,body:s.body,img:null,scale:100,ox:0,oy:0}));
+  state.slides.push({type:'ending',lines:j.ending.lines,question:j.ending.question,img:null,scale:100,ox:0,oy:0});
+  buildEditor();
+}
+document.getElementById('genBtn').addEventListener('click',generate);
+
+/* ================= 範例資料 ================= */
+document.getElementById('demoBtn').addEventListener('click',()=>{
+  applyResult({
+    caption:'挑牛仔褲不是考驗身材,是考驗版型。這 5 個挑選重點,棉花糖女孩收藏起來,下次試穿直接對照著看!\n\n#VVDOUBLE #大尺碼不是特例 #肉肉女孩 #牛仔褲穿搭 #中大尺碼',
+    cover:{tag:'棉花糖女孩穿搭課',title1:'大尺碼的「牛仔褲公式」',title2:'這樣挑最自在',subtitle:'不是你的腿有問題\n是版型沒挑對'},
+    slides:[
+      {title:'先看褲頭,再看褲型',body:'很多人試穿只看褲管\n但褲頭才是舒服的關鍵\n✓ 高腰包覆感最安心\n✓ 鬆緊帶後腰久坐不勒\n✓ 前平後鬆版型最好穿'},
+      {title:'直筒是最安全的答案',body:'大腿有肉也完全不用怕\n直筒從臀部直直落下\n線條俐落走路又輕鬆\n✓ 微彈面料活動不卡\n✓ 九分長度露腳踝更輕盈'},
+      {title:'深色不是唯一解',body:'深色當然耐看百搭\n但淺色也可以穿得漂亮\n重點是整體比例\n✓ 淺色褲搭深色上衣\n✓ 上短下長拉高腰線'},
+      {title:'尺碼「寧鬆勿緊」',body:'緊繃的褲子穿一整天\n只會讓你坐立難安\n✓ 坐下時褲頭不掐肉\n✓ 大腿處留一指寬鬆份\n剛剛好的鬆才是高級感'},
+      {title:'試穿時做三個動作',body:'✓ 深蹲一次看褲頭會不會滑\n✓ 坐下感受大腿鬆緊\n✓ 走十步感受腰間摩擦\n三關都過,才是你的褲子'}
+    ],
+    ending:{lines:'挑褲子不是遷就身材\n是找到懂你身材的版型\n大尺碼不是特例\n而是我們的日常',question:'你最常卡關的是哪一步?'}
+  });
+});
+</script>
+</body>
+</html>
