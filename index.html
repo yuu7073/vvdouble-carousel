@@ -14,6 +14,28 @@
   * { margin:0; padding:0; box-sizing:border-box; }
   body { font-family:"Noto Sans TC",sans-serif; background:#F2F0EC; color:#2B2B2B; padding:20px; }
   .wrap { max-width:1100px; margin:0 auto; }
+  body.has-side { padding-left:340px; }
+  #side { position:fixed; left:0; top:0; bottom:0; width:320px; background:#fff; border-right:1px solid #E6E0D6;
+    display:flex; flex-direction:column; z-index:20; }
+  #side .side-head { padding:18px 16px 10px; border-bottom:1px solid #EFEAE2; }
+  #side .side-head h2 { font-size:15px; font-weight:900; color:#3A2E26; margin-bottom:10px; }
+  #side .tabs { margin:10px 0 0; flex-wrap:wrap; gap:6px; }
+  #side .tab { padding:5px 11px; font-size:12px; }
+  #histSearch { padding:8px 10px; font-size:13px; }
+  #histList { flex:1; overflow-y:auto; padding:4px 10px 10px; }
+  #side .side-foot { padding:10px 16px 14px; border-top:1px solid #EFEAE2; }
+  #side .side-foot .hint { margin-top:0; }
+  .star { border:none; background:none; cursor:pointer; font-size:18px; line-height:1; color:#D4CCC0; padding:2px; flex-shrink:0; }
+  .star.on { color:#E0A526; }
+  .hist-row { cursor:pointer; }
+  .hist-row:hover { background:#FAF8F4; }
+  .hist-del { border:none; background:none; color:#B8B0A4; font-size:12px; cursor:pointer; padding:4px 6px; border-radius:6px; flex-shrink:0; font-family:inherit; }
+  .hist-del:hover { background:#F3EEE6; color:#8A5A3C; }
+  .hist-del.armed { color:#fff; background:#B5523B; }
+  @media (max-width:900px){
+    body.has-side { padding-left:20px; }
+    #side { position:static; width:auto; border:none; border-radius:14px; margin-bottom:16px; max-height:420px; }
+  }
   h1 { font-size:22px; font-weight:900; letter-spacing:1px; margin-bottom:4px; }
   .tagline { font-size:13px; color:#8A8378; margin-bottom:20px; }
   .card { background:#fff; border-radius:14px; padding:20px; margin-bottom:16px; box-shadow:0 1px 4px rgba(0,0,0,0.06); }
@@ -65,8 +87,7 @@
   .tabs { display:flex; gap:8px; margin-bottom:10px; }
   .tab { border:1px solid #DDD6CC; background:#FCFBF9; border-radius:20px; padding:6px 14px; font-size:13px; cursor:pointer; font-family:inherit; color:#6B6459; }
   .tab.on { background:#3A2E26; color:#fff; border-color:#3A2E26; }
-  #histList { max-height:320px; overflow:auto; }
-  .hist-row { display:flex; align-items:center; gap:8px; padding:10px 4px; border-bottom:1px solid #EFEAE2; }
+  .hist-row { display:flex; align-items:center; gap:6px; padding:10px 4px; border-bottom:1px solid #EFEAE2; }
   .hist-row.current { background:#F7F4EF; border-radius:8px; }
   .hist-info { flex:1; min-width:0; }
   .hist-title { font-size:14px; font-weight:700; color:#3A2E26; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -74,21 +95,27 @@
   #cloudState { font-size:12px; color:#A97C50; margin-left:8px; }
 </style>
 </head>
-<body>
+<body class="has-side">
+<aside id="side">
+  <div class="side-head">
+    <h2>雲端草稿與歷史</h2>
+    <input type="text" id="histSearch" placeholder="搜尋標題、主題、內文">
+    <div class="tabs">
+      <button class="tab on" id="tabDraft">草稿</button>
+      <button class="tab" id="tabDone">已完成</button>
+      <button class="tab" id="tabStar">★ 星號</button>
+    </div>
+  </div>
+  <div id="histList"><div class="hint">讀取中…</div></div>
+  <div class="side-foot"><div class="hint">生成後自動存成草稿,修改都會同步到雲端。點 ☆ 加星號,常用的就不怕找不到。</div></div>
+</aside>
 <div class="wrap">
   <h1>VV DOUBLE 輪播貼文產生器</h1>
   <div class="tagline">知識型引流貼文 · AI 撰稿 + 文字排版 · IG 4:5(1080×1350)</div>
 
   <div class="card">
-    <h2>1. AI 模型與 API Key</h2>
-    <label>使用哪個 AI</label>
-    <select id="provider">
-      <option value="claude">Claude(Sonnet 4.6)</option>
-      <option value="gpt-5.5">ChatGPT(GPT-5.5,品質優先)</option>
-      <option value="gpt-5.4-mini">ChatGPT(GPT-5.4 mini,便宜快速)</option>
-    </select>
-    <label id="keyLabel">API Key</label>
-    <input type="password" id="apikey" placeholder="">
+    <h2>1. API Key</h2>
+    <input type="password" id="apikey" placeholder="貼上 Anthropic API Key(只存在這個分頁,關閉即清除)">
   </div>
 
   <div class="card">
@@ -155,16 +182,6 @@
     </div>
   </div>
 
-  <div class="card">
-    <h2>3. 雲端草稿與歷史</h2>
-    <div class="tabs">
-      <button class="tab on" id="tabDraft">草稿</button>
-      <button class="tab" id="tabDone">已完成</button>
-    </div>
-    <div id="histList"><div class="hint">讀取中…</div></div>
-    <div class="hint">生成後會自動存成草稿,修改內容、換版型、上傳照片都會自動同步到雲端,團隊成員打開工具都看得到。發佈後按「標記為完成」就會移到「已完成」。</div>
-  </div>
-
   <div id="result" class="hidden">
     <div class="card" id="capbox">
       <h2>IG 發文文案</h2>
@@ -195,7 +212,7 @@ const THEMES = {
   I: { name:'色條標籤', sw:'linear-gradient(135deg,#D6E4FF 55%,#2B5CE6 55%)', acc:'#2B5CE6' }
 };
 
-let state = { tpl:'A', acc:THEMES.A.acc, slides:[], caption:'', postId:null, postStatus:'draft', createdAt:0 };
+let state = { tpl:'A', acc:THEMES.A.acc, slides:[], caption:'', postId:null, postStatus:'draft', createdAt:0, starred:false };
 
 /* ================= 版型選擇 UI ================= */
 const tplGrid = document.getElementById('tplGrid');
@@ -905,53 +922,13 @@ function buildRegenPrompt(i,instr){
   + (s.type==='content'?'8. body 為 4 到 6 行\n':'')
   + '\nJSON 格式(只回傳這一頁):\n'+schema;
 }
-/* ===== AI 供應商:Claude / ChatGPT,各自的 Key 分開存 ===== */
-function isGPT(p){ return p!=='claude'; }
-function keySlot(p){ return isGPT(p)?'openai_api_key':'anthropic_api_key'; }
-function getProvider(){ return document.getElementById('provider').value; }
-function syncKeyUI(){
-  const p=getProvider(), el=document.getElementById('apikey');
-  el.value=sessionStorage.getItem(keySlot(p))||'';
-  el.placeholder=isGPT(p)?'貼上 OpenAI API Key(sk- 開頭,只存在這個分頁,關閉即清除)':'貼上 Anthropic API Key(只存在這個分頁,關閉即清除)';
-  document.getElementById('keyLabel').textContent=isGPT(p)?'OpenAI API Key':'Anthropic API Key';
-}
-(function(){
-  const sel=document.getElementById('provider');
-  let last=null; try{ last=localStorage.getItem('vv_provider'); }catch(e){} if(last&&[...sel.options].some(o=>o.value===last)) sel.value=last;
-  sel.addEventListener('change',()=>{ try{ localStorage.setItem('vv_provider',sel.value); }catch(e){} syncKeyUI(); });
-  syncKeyUI();
-})();
-function parseJSONText(text){
-  const m=(text||'').replace(/```json|```/g,'').match(/\{[\s\S]*\}/);
-  if(!m) throw new Error('AI 回傳格式不正確,請再試一次');
-  return JSON.parse(m[0]);
-}
 async function callClaude(prompt,maxTokens){
-  const p=getProvider();
   const key=document.getElementById('apikey').value.trim();
-  if(key) sessionStorage.setItem(keySlot(p),key);
-  const saved=sessionStorage.getItem(keySlot(p));
-  if(!saved) throw new Error('請先貼上 '+(isGPT(p)?'OpenAI':'Anthropic')+' API Key');
+  if(key) sessionStorage.setItem('anthropic_api_key',key);
+  const saved=sessionStorage.getItem('anthropic_api_key');
+  if(!saved) throw new Error('請先貼上 API Key');
   const headers=new Headers();
   headers.append('Content-Type','application/json');
-  if(isGPT(p)){
-    headers.append('Authorization','Bearer '+saved);
-    const res=await fetch('https://api.openai.com/v1/chat/completions',{
-      method:'POST',headers,
-      body:JSON.stringify({
-        model:p,
-        messages:[{role:'user',content:prompt}],
-        response_format:{type:'json_object'},
-        reasoning_effort:'medium',
-        max_completion_tokens:(maxTokens||4000)*4
-      })
-    });
-    const data=await res.json();
-    if(data.error) throw new Error(data.error.message||'API 錯誤');
-    const ch=(data.choices||[])[0]||{};
-    if(ch.finish_reason==='length') throw new Error('AI 回覆被截斷,請再試一次');
-    return parseJSONText(ch.message&&ch.message.content);
-  }
   headers.append('x-api-key',saved);
   headers.append('anthropic-version','2023-06-01');
   headers.append('anthropic-dangerous-direct-browser-access','true');
@@ -961,7 +938,10 @@ async function callClaude(prompt,maxTokens){
   });
   const data=await res.json();
   if(data.error) throw new Error(data.error.message||'API 錯誤');
-  return parseJSONText((data.content||[]).filter(c=>c.type==='text').map(c=>c.text).join('\n'));
+  const text=(data.content||[]).filter(c=>c.type==='text').map(c=>c.text).join('\n');
+  const m=text.replace(/```json|```/g,'').match(/\{[\s\S]*\}/);
+  if(!m) throw new Error('AI 回傳格式不正確,請再試一次');
+  return JSON.parse(m[0]);
 }
 /* 保險:把破折號與刪除號拿掉 */
 function scrub(v){ return typeof v==='string' ? v.replace(/——|—|–|~~/g,',').replace(/[̶̵]/g,'') : v; }
@@ -1006,7 +986,7 @@ function applyResult(j){
   state.slides.push(newSlide({type:'cover',tag:j.cover.tag,title1:j.cover.title1,title2:j.cover.title2,subtitle:j.cover.subtitle}));
   (j.slides||[]).forEach(s=>state.slides.push(newSlide({type:'content',title:s.title,body:s.body})));
   state.slides.push(newSlide({type:'ending',lines:j.ending.lines,question:j.ending.question}));
-  state.postId=newId(); state.postStatus='draft'; state.createdAt=Date.now();
+  state.postId=newId(); state.postStatus='draft'; state.createdAt=Date.now(); state.starred=false;
   updateDoneBtn();
   buildEditor();
   saveNow();
@@ -1038,7 +1018,7 @@ function serialize(){
   const c=state.slides[0]||{};
   const title=((c.title1||'')+' '+(c.title2||'')).replace(/\n/g,' ').trim()||'(未命名)';
   return {
-    title, status:state.postStatus||'draft',
+    title, status:state.postStatus||'draft', starred:!!state.starred,
     createdAt:state.createdAt||Date.now(), updatedAt:Date.now(),
     settings, caption:state.caption||'',
     slides:state.slides.map(s=>{
@@ -1074,37 +1054,67 @@ document.getElementById('tplGrid').addEventListener('click',()=>markDirty());
 document.getElementById('accColor').addEventListener('input',()=>markDirty());
 SETTING_IDS.forEach(id=>{ document.getElementById(id).addEventListener('input',()=>markDirty()); document.getElementById(id).addEventListener('change',()=>markDirty()); });
 
-/* 歷史清單 */
-let histTab='draft', histData={};
+/* 歷史清單(左側欄):搜尋、星號 */
+let histTab='draft', histData={}, histQ='';
 function fmtTime(t){ const d=new Date(t||0); return (d.getMonth()+1)+'/'+d.getDate()+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
+function postText(v){
+  const st=v.settings||{};
+  return [v.title,st.topic,st.extra,v.caption].concat((v.slides||[]).map(x=>[x.tag,x.title1,x.title2,x.subtitle,x.title,x.body,x.lines,x.question].join(' '))).join(' ').toLowerCase();
+}
+function toggleStar(id){
+  const v=histData[id]; if(!v||!db) return;
+  const nv=!v.starred;
+  if(id===state.postId) state.starred=nv;
+  db.ref('/carousel/posts/'+id+'/starred').set(nv).catch(e=>{ console.error(e); setStatus('星號儲存失敗:'+e.message); });
+}
+function setTab(t){
+  histTab=t;
+  [['draft','tabDraft'],['done','tabDone'],['star','tabStar']].forEach(([k,el])=>document.getElementById(el).classList.toggle('on',k===t));
+  renderHistory();
+}
 function renderHistory(){
   const box=document.getElementById('histList'); box.innerHTML='';
-  const items=Object.entries(histData).filter(([,v])=>(v.status||'draft')===histTab).sort((a,b)=>(b[1].updatedAt||0)-(a[1].updatedAt||0));
-  document.getElementById('tabDraft').textContent='草稿 ('+Object.values(histData).filter(v=>(v.status||'draft')==='draft').length+')';
-  document.getElementById('tabDone').textContent='已完成 ('+Object.values(histData).filter(v=>v.status==='done').length+')';
-  if(!items.length){ box.innerHTML='<div class="hint">目前沒有'+(histTab==='done'?'已完成的內容':'草稿')+'</div>'; return; }
+  const all=Object.entries(histData);
+  document.getElementById('tabDraft').textContent='草稿 ('+all.filter(([,v])=>(v.status||'draft')==='draft').length+')';
+  document.getElementById('tabDone').textContent='已完成 ('+all.filter(([,v])=>v.status==='done').length+')';
+  document.getElementById('tabStar').textContent='★ 星號 ('+all.filter(([,v])=>v.starred).length+')';
+  const q=histQ.trim().toLowerCase();
+  const items=all
+    .filter(([,v])=> histTab==='star' ? !!v.starred : (v.status||'draft')===histTab)
+    .filter(([,v])=> !q || q.split(/\s+/).every(w=>postText(v).includes(w)))
+    .sort((a,b)=> (histTab!=='star' && (!!b[1].starred-!!a[1].starred)) || (b[1].updatedAt||0)-(a[1].updatedAt||0));
+  if(!items.length){
+    box.innerHTML='<div class="hint" style="padding:10px 4px">'+(q?'找不到符合「'+histQ.trim().replace(/[<>&]/g,'')+'」的內容':histTab==='star'?'還沒有加星號的貼文':histTab==='done'?'目前沒有已完成的內容':'目前沒有草稿')+'</div>';
+    return;
+  }
   items.forEach(([id,v])=>{
     const row=document.createElement('div'); row.className='hist-row'+(id===state.postId?' current':'');
+    const star=document.createElement('button'); star.className='star'+(v.starred?' on':''); star.textContent=v.starred?'★':'☆';
+    star.title=v.starred?'取消星號':'加星號';
+    star.addEventListener('click',e=>{ e.stopPropagation(); toggleStar(id); });
     const info=document.createElement('div'); info.className='hist-info';
     const t=document.createElement('div'); t.className='hist-title'; t.textContent=v.title||'(未命名)';
     const m=document.createElement('div'); m.className='hint';
     const tplName=(THEMES[(v.settings||{}).tpl]||{}).name||'';
-    m.textContent=fmtTime(v.updatedAt)+' · '+((v.slides||[]).length)+' 頁 · '+tplName+((v.settings||{}).vol?' · VOL.'+v.settings.vol:'');
+    m.textContent=(id===state.postId?'編輯中 · ':'')+fmtTime(v.updatedAt)+' · '+tplName+((v.settings||{}).vol?' · VOL.'+v.settings.vol:'')+(histTab==='star'?(v.status==='done'?' · 已完成':' · 草稿'):'');
     info.appendChild(t); info.appendChild(m);
-    const open=document.createElement('button'); open.className='btn btn-sub btn-sm'; open.textContent=id===state.postId?'編輯中':'開啟';
-    open.disabled = id===state.postId;
-    open.addEventListener('click',()=>loadPost(id,v));
-    const del=document.createElement('button'); del.className='btn btn-sub btn-sm'; del.textContent='刪除';
-    del.addEventListener('click',()=>deletePost(id,v,del));
-    row.appendChild(info); row.appendChild(open); row.appendChild(del);
+    const del=document.createElement('button'); del.className='hist-del'; del.textContent='刪除';
+    del.addEventListener('click',e=>{ e.stopPropagation(); deletePost(id,v,del); });
+    row.appendChild(star); row.appendChild(info); row.appendChild(del);
+    row.addEventListener('click',()=>{ if(id!==state.postId) loadPost(id,v); });
     box.appendChild(row);
   });
 }
-document.getElementById('tabDraft').addEventListener('click',()=>{ histTab='draft'; document.getElementById('tabDraft').classList.add('on'); document.getElementById('tabDone').classList.remove('on'); renderHistory(); });
-document.getElementById('tabDone').addEventListener('click',()=>{ histTab='done'; document.getElementById('tabDone').classList.add('on'); document.getElementById('tabDraft').classList.remove('on'); renderHistory(); });
+document.getElementById('tabDraft').addEventListener('click',()=>setTab('draft'));
+document.getElementById('tabDone').addEventListener('click',()=>setTab('done'));
+document.getElementById('tabStar').addEventListener('click',()=>setTab('star'));
+document.getElementById('histSearch').addEventListener('input',e=>{ histQ=e.target.value; renderHistory(); });
 if(db){
-  db.ref('/carousel/posts').orderByChild('updatedAt').limitToLast(200).on('value',snap=>{ histData=snap.val()||{}; renderHistory(); },
-    e=>{ document.getElementById('histList').innerHTML='<div class="hint">讀取雲端失敗:'+e.message+'</div>'; });
+  db.ref('/carousel/posts').orderByChild('updatedAt').limitToLast(300).on('value',snap=>{
+    histData=snap.val()||{};
+    if(state.postId && histData[state.postId]) state.starred=!!histData[state.postId].starred;
+    renderHistory();
+  }, e=>{ document.getElementById('histList').innerHTML='<div class="hint">讀取雲端失敗:'+e.message+'</div>'; });
 }else{
   document.getElementById('histList').innerHTML='<div class="hint">雲端未連線</div>';
 }
@@ -1116,7 +1126,7 @@ function loadPost(id,v){
   document.getElementById('accColor').value=state.acc;
   document.querySelectorAll('.tpl-item').forEach(el=>el.classList.toggle('active',el.dataset.key===state.tpl));
   state.caption=v.caption||''; document.getElementById('caption').value=state.caption;
-  state.postId=id; state.postStatus=v.status||'draft'; state.createdAt=v.createdAt||Date.now();
+  state.postId=id; state.postStatus=v.status||'draft'; state.createdAt=v.createdAt||Date.now(); state.starred=!!v.starred;
   state.slides=(v.slides||[]).map(s=>newSlide(Object.assign({},s,{img:null})));
   updateDoneBtn();
   buildEditor();
@@ -1131,7 +1141,7 @@ function loadPost(id,v){
   document.getElementById('result').scrollIntoView({behavior:'smooth'});
 }
 async function deletePost(id,v,btn){
-  if(btn.dataset.armed!=='1'){ btn.dataset.armed='1'; btn.textContent='再按一次確認刪除'; setTimeout(()=>{ btn.dataset.armed=''; btn.textContent='刪除'; },3000); return; }
+  if(btn.dataset.armed!=='1'){ btn.dataset.armed='1'; btn.classList.add('armed'); btn.textContent='確認刪除'; setTimeout(()=>{ btn.dataset.armed=''; btn.classList.remove('armed'); btn.textContent='刪除'; },3000); return; }
   (v.slides||[]).forEach(s=>{ if(s.imgPath && storage) storage.ref(s.imgPath).delete().catch(()=>{}); });
   await db.ref('/carousel/posts/'+id).remove();
   if(id===state.postId){ state.postId=null; setCloud('這份已從雲端刪除'); }
