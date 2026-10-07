@@ -14,7 +14,15 @@
   * { margin:0; padding:0; box-sizing:border-box; }
   body { font-family:"Noto Sans TC",sans-serif; background:#F2F0EC; color:#2B2B2B; padding:20px; }
   .wrap { max-width:1100px; margin:0 auto; }
-  body.has-side { padding-left:340px; }
+  body.has-side { padding-left:364px; transition:padding-left .25s ease; }
+  body.has-side.side-closed { padding-left:44px; }
+  #side { transition:transform .25s ease; }
+  body.side-closed #side { transform:translateX(-100%); }
+  #sideToggle { position:fixed; top:18px; left:320px; z-index:21; width:24px; height:56px; border:1px solid #E6E0D6; border-left:none;
+    border-radius:0 10px 10px 0; background:#fff; color:#8A8378; font-size:14px; cursor:pointer; font-family:inherit;
+    box-shadow:2px 1px 4px rgba(0,0,0,0.05); transition:left .25s ease; padding:0; }
+  #sideToggle:hover { color:#3A2E26; background:#F7F4EF; }
+  body.side-closed #sideToggle { left:0; }
   #side { position:fixed; left:0; top:0; bottom:0; width:320px; background:#fff; border-right:1px solid #E6E0D6;
     display:flex; flex-direction:column; z-index:20; }
   #side .side-head { padding:18px 16px 10px; border-bottom:1px solid #EFEAE2; }
@@ -33,7 +41,9 @@
   .hist-del:hover { background:#F3EEE6; color:#8A5A3C; }
   .hist-del.armed { color:#fff; background:#B5523B; }
   @media (max-width:900px){
-    body.has-side { padding-left:20px; }
+    body.has-side, body.has-side.side-closed { padding-left:20px; }
+    body.side-closed #side { transform:none; }
+    #sideToggle { display:none; }
     #side { position:static; width:auto; border:none; border-radius:14px; margin-bottom:16px; max-height:420px; }
   }
   h1 { font-size:22px; font-weight:900; letter-spacing:1px; margin-bottom:4px; }
@@ -109,6 +119,7 @@
   <div id="histList"><div class="hint">讀取中…</div></div>
   <div class="side-foot"><div class="hint">生成後自動存成草稿,修改都會同步到雲端。點 ☆ 加星號,常用的就不怕找不到。</div></div>
 </aside>
+<button id="sideToggle" title="收起歷史">‹</button>
 <div class="wrap">
   <h1>VV DOUBLE 輪播貼文產生器</h1>
   <div class="tagline">知識型引流貼文 · AI 撰稿 + 文字排版 · IG 4:5(1080×1350)</div>
@@ -1053,6 +1064,15 @@ document.getElementById('saveBtn').addEventListener('click',saveNow);
 document.getElementById('tplGrid').addEventListener('click',()=>markDirty());
 document.getElementById('accColor').addEventListener('input',()=>markDirty());
 SETTING_IDS.forEach(id=>{ document.getElementById(id).addEventListener('input',()=>markDirty()); document.getElementById(id).addEventListener('change',()=>markDirty()); });
+
+/* 左側欄收合(記住上次狀態) */
+function setSide(closed){
+  document.body.classList.toggle('side-closed',closed);
+  const b=document.getElementById('sideToggle'); b.textContent=closed?'›':'‹'; b.title=closed?'展開歷史':'收起歷史';
+  try{ localStorage.setItem('vv_carousel_side_closed',closed?'1':''); }catch(e){}
+}
+document.getElementById('sideToggle').addEventListener('click',()=>setSide(!document.body.classList.contains('side-closed')));
+(function(){ let c=false; try{ c=localStorage.getItem('vv_carousel_side_closed')==='1'; }catch(e){} setSide(c); })();
 
 /* 歷史清單(左側欄):搜尋、星號 */
 let histTab='draft', histData={}, histQ='';
