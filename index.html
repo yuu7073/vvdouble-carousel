@@ -7,6 +7,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Noto+Serif+TC:wght@400;700;900&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   body { font-family:"Noto Sans TC",sans-serif; background:#F2F0EC; color:#2B2B2B; padding:20px; }
@@ -55,6 +58,20 @@
   .hint { font-size:12px; color:#9C948A; margin-top:6px; line-height:1.7; }
   .acc-row { display:flex; align-items:center; gap:10px; margin-top:6px; }
   .acc-row .hint { margin-top:0; }
+  .regen { display:flex; gap:6px; margin-top:6px; }
+  .regen input { flex:1; font-size:13px !important; padding:8px 10px !important; margin:0 !important; }
+  .regen .btn { white-space:nowrap; }
+  .upstate { font-size:12px; color:#9C948A; }
+  .tabs { display:flex; gap:8px; margin-bottom:10px; }
+  .tab { border:1px solid #DDD6CC; background:#FCFBF9; border-radius:20px; padding:6px 14px; font-size:13px; cursor:pointer; font-family:inherit; color:#6B6459; }
+  .tab.on { background:#3A2E26; color:#fff; border-color:#3A2E26; }
+  #histList { max-height:320px; overflow:auto; }
+  .hist-row { display:flex; align-items:center; gap:8px; padding:10px 4px; border-bottom:1px solid #EFEAE2; }
+  .hist-row.current { background:#F7F4EF; border-radius:8px; }
+  .hist-info { flex:1; min-width:0; }
+  .hist-title { font-size:14px; font-weight:700; color:#3A2E26; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .hist-row .hint { margin-top:2px; }
+  #cloudState { font-size:12px; color:#A97C50; margin-left:8px; }
 </style>
 </head>
 <body>
@@ -131,6 +148,16 @@
     </div>
   </div>
 
+  <div class="card">
+    <h2>3. 雲端草稿與歷史</h2>
+    <div class="tabs">
+      <button class="tab on" id="tabDraft">草稿</button>
+      <button class="tab" id="tabDone">已完成</button>
+    </div>
+    <div id="histList"><div class="hint">讀取中…</div></div>
+    <div class="hint">生成後會自動存成草稿,修改內容、換版型、上傳照片都會自動同步到雲端,團隊成員打開工具都看得到。發佈後按「標記為完成」就會移到「已完成」。</div>
+  </div>
+
   <div id="result" class="hidden">
     <div class="card" id="capbox">
       <h2>IG 發文文案</h2>
@@ -138,8 +165,11 @@
       <div style="margin-top:10px">
         <button class="btn btn-sub btn-sm" id="copyCap">複製文案</button>
         <button class="btn btn-main btn-sm" id="dlAll">下載全部圖片</button>
+        <button class="btn btn-sub btn-sm" id="saveBtn">立即儲存</button>
+        <button class="btn btn-sub btn-sm" id="doneBtn">標記為完成</button>
+        <span id="cloudState"></span>
       </div>
-      <div class="hint">文字改了即時重畫。每頁可上傳背景照片,並用滑桿調整縮放與位置。標題或內文用「」框住的詞,在 D 版型會自動跳色。</div>
+      <div class="hint">文字改了即時重畫。標題太長會在詞語之間自動換行,也可以在標題欄按 Enter 自己決定斷在哪。某一頁寫得不好,在那頁下方輸入想怎麼改,按「重新生成這頁」就只重寫那一頁。標題或內文用「」框住的詞,在 D 版型會自動跳色。</div>
     </div>
     <div id="slides"></div>
   </div>
@@ -158,7 +188,7 @@ const THEMES = {
   I: { name:'色條標籤', sw:'linear-gradient(135deg,#D6E4FF 55%,#2B5CE6 55%)', acc:'#2B5CE6' }
 };
 
-let state = { tpl:'A', acc:THEMES.A.acc, slides:[], caption:'' };
+let state = { tpl:'A', acc:THEMES.A.acc, slides:[], caption:'', postId:null, postStatus:'draft', createdAt:0 };
 
 /* ================= 版型選擇 UI ================= */
 const tplGrid = document.getElementById('tplGrid');
@@ -181,16 +211,95 @@ document.getElementById('accColor').addEventListener('input', e => { state.acc =
 ['vol','brand','sub','footerText','endFooterText'].forEach(id =>
   document.getElementById(id).addEventListener('input', renderAll));
 
+/* ================= 文字切分(字元 / 詞) ================= */
+const segG = (typeof Intl!=='undefined' && Intl.Segmenter) ? new Intl.Segmenter('zh-Hant',{granularity:'grapheme'}) : null;
+const segW = (typeof Intl!=='undefined' && Intl.Segmenter) ? new Intl.Segmenter('zh-Hant',{granularity:'word'}) : null;
+function graphemes(s){ s=String(s||''); return segG ? Array.from(segG.segment(s),g=>g.segment) : Array.from(s); }
+function words(s){ s=String(s||''); return segW ? Array.from(segW.segment(s),g=>g.segment) : graphemes(s); }
+
 /* ================= 共用繪圖工具 ================= */
 function setLS(x,v){ try{ x.letterSpacing = v+'px'; }catch(e){} }
 function shadowOn(x){ x.shadowColor='rgba(0,0,0,0.45)'; x.shadowBlur=10; x.shadowOffsetY=2; }
 function shadowOff(x){ x.shadowColor='transparent'; x.shadowBlur=0; x.shadowOffsetY=0; }
+/* 斷行:以「詞」為單位,標點不放行首、開引號不放行尾,並把各行長度平均(避免最後一行只剩一兩個字) */
+const NO_START='，。、！？；：」』）》〉】…,.!?;:)]%~～ー';
+const NO_END='「『（《〈【([';
+const GLUE_BACK='的了嗎吧呢啊喔耶唷哦啦著過們嘛呀囉';                          /* 單字黏前面 */
+const GLUE_FWD='最很超更再不也都太被把讓給在從跟和與對向先就才還又或';        /* 單字黏後面 */
+const PUNCT_END=/[，。、！？；：」』）》…,.!?;:)]\s*$|\s$/;
+function units(x,r,mw){
+  const ws=words(r); const u=[]; let carry='';
+  for(let i=0;i<ws.length;i++){
+    const raw=ws[i]; const w=carry+raw; carry='';
+    if(u.length && (NO_START.includes(raw[0]) || /^\s+$/.test(raw))){ u[u.length-1]+=w; continue; }
+    if(u.length && NO_END.includes(u[u.length-1].slice(-1))){ u[u.length-1]+=w; continue; }
+    if(raw.length===1 && u.length && GLUE_BACK.includes(raw)){ u[u.length-1]+=w; continue; }
+    if(raw.length===1 && GLUE_FWD.includes(raw) && i<ws.length-1 && !NO_START.includes(ws[i+1][0]) && !/^\s+$/.test(ws[i+1])){ carry=w; continue; }
+    u.push(w);
+  }
+  if(carry){ if(u.length) u[u.length-1]+=carry; else u.push(carry); }
+  /* 單一詞比整行還寬時,才退回逐字切 */
+  const out=[];
+  u.forEach(w=>{
+    if(x.measureText(w).width<=mw){ out.push(w); return; }
+    let l='';
+    graphemes(w).forEach(g=>{ if(l && x.measureText(l+g).width>mw){ out.push(l); l=g; } else l+=g; });
+    if(l) out.push(l);
+  });
+  return out;
+}
+function greedy(x,us,w){
+  const lines=[]; let l='';
+  us.forEach(t=>{ if(l && x.measureText((l+t).trimEnd()).width>w){ lines.push(l.trimEnd()); l=t.trimStart(); } else l+=t; });
+  if(l) lines.push(l.trimEnd());
+  return lines;
+}
+/* 在「行數最少」的前提下,找最好的斷點:各行長度接近、優先斷在標點後、避免單字孤立 */
+function bestBreak(x,us,mw,L){
+  const n=us.length;
+  const lineW=(i,j)=>x.measureText(us.slice(i,j).join('').trim()).width;
+  const cost=(i,j)=>{
+    const w=lineW(i,j); if(w>mw) return Infinity;
+    const slack=(mw-w)/mw; let c=slack*slack*100;
+    if(j<n){
+      const last=us[j-1], next=us[j];
+      if(PUNCT_END.test(last)) c-=25;
+      if(graphemes(last.trim()).length===1) c+=20;
+      if(graphemes(next.trim()).length===1) c+=20;
+      if('的了著過們嗎吧呢'.includes(next.trim()[0])) c+=60;   /* 這些字不放行首 */
+    }
+    return c;
+  };
+  const INF=Infinity;
+  const dp=Array.from({length:L+1},()=>new Array(n+1).fill(INF));
+  const from=Array.from({length:L+1},()=>new Array(n+1).fill(-1));
+  dp[0][0]=0;
+  for(let k=1;k<=L;k++){
+    for(let j=1;j<=n;j++){
+      for(let i=k-1;i<j;i++){
+        if(dp[k-1][i]===INF) continue;
+        const c=cost(i,j); if(c===INF) continue;
+        const v=dp[k-1][i]+c;
+        if(v<dp[k][j]){ dp[k][j]=v; from[k][j]=i; }
+      }
+    }
+  }
+  if(dp[L][n]===INF) return null;
+  const lines=[]; let j=n;
+  for(let k=L;k>=1;k--){ const i=from[k][j]; lines.unshift(us.slice(i,j).join('').trim()); j=i; }
+  return lines;
+}
 function wrap(x,t,mw){
   const o=[];
   String(t||'').split('\n').forEach(r=>{
-    let l='';
-    for(const c of r){ if(l && x.measureText(l+c).width>mw){ o.push(l); l=c; } else l+=c; }
-    o.push(l);
+    if(!r.trim()) return;
+    const us=units(x,r,mw);
+    let lines=greedy(x,us,mw);
+    if(lines.length>1 && us.length<=60){
+      const best=bestBreak(x,us,mw,lines.length);
+      if(best) lines=best;
+    }
+    lines.forEach(l=>o.push(l));
   });
   return o.filter(l=>l!=='');
 }
@@ -233,7 +342,7 @@ function footer(x,m,isLast,color,center,withShadow){
 /* 關鍵字跳色:逐字繪製,「」內用強調色 */
 function drawRich(x,line,sx,y,base,accent,st){
   let px=sx;
-  for(const ch of line){
+  for(const ch of graphemes(line)){
     if(ch==='「'){ st.q=true; x.fillStyle=accent; }
     else if(ch==='」'){ x.fillStyle=accent; }
     else x.fillStyle=st.q?accent:base;
@@ -573,20 +682,35 @@ function renderSlide(i){
 function renderAll(){ state.slides.forEach((_,i)=>renderSlide(i)); }
 
 /* ================= 編輯卡片 UI ================= */
-function field(ph,val,key,i,isArea){
+function field(ph,val,key,i,isArea,rows){
   const el=document.createElement(isArea?'textarea':'input');
   if(!isArea) el.type='text';
+  if(isArea && rows){ el.rows=rows; el.style.minHeight='0'; }
   el.placeholder=ph; el.value=val||'';
-  el.addEventListener('input',()=>{ state.slides[i][key]=el.value; renderSlide(i); });
+  el.addEventListener('input',()=>{ state.slides[i][key]=el.value; renderSlide(i); markDirty(); });
   return el;
 }
 function rangeRow(label,min,max,val,cb){
   const row=document.createElement('div'); row.className='rrow';
   const sp=document.createElement('span'); sp.textContent=label; row.appendChild(sp);
   const r=document.createElement('input'); r.type='range'; r.min=min; r.max=max; r.value=val;
-  r.addEventListener('input',()=>cb(parseInt(r.value)));
+  r.addEventListener('input',()=>{ cb(parseInt(r.value)); markDirty(); });
   row.appendChild(r);
   return row;
+}
+/* 背景圖壓縮:長邊最多 1600px,轉 JPEG */
+function compressImage(file){
+  return new Promise((resolve,reject)=>{
+    const im=new Image();
+    im.onload=()=>{
+      const r=Math.min(1,1600/Math.max(im.width,im.height));
+      const c=document.createElement('canvas'); c.width=Math.round(im.width*r); c.height=Math.round(im.height*r);
+      c.getContext('2d').drawImage(im,0,0,c.width,c.height);
+      c.toBlob(b=>b?resolve(b):reject(new Error('壓縮失敗')),'image/jpeg',0.85);
+    };
+    im.onerror=()=>reject(new Error('圖片讀取失敗'));
+    im.src=URL.createObjectURL(file);
+  });
 }
 function buildEditor(){
   const box=document.getElementById('slides');
@@ -602,41 +726,73 @@ function buildEditor(){
     const f=document.createElement('div'); f.className='fields';
     if(s.type==='cover'){
       f.appendChild(field('分類小標',s.tag,'tag',i));
-      f.appendChild(field('主標上行',s.title1,'title1',i));
-      f.appendChild(field('主標下行',s.title2,'title2',i));
+      f.appendChild(field('主標上行(可按 Enter 自己換行)',s.title1,'title1',i,true,2));
+      f.appendChild(field('主標下行(可按 Enter 自己換行)',s.title2,'title2',i,true,2));
       f.appendChild(field('副標(換行分行)',s.subtitle,'subtitle',i,true));
     } else if(s.type==='content'){
-      f.appendChild(field('本頁標題',s.title,'title',i));
+      f.appendChild(field('本頁標題(可按 Enter 自己換行)',s.title,'title',i,true,2));
       f.appendChild(field('內文(換行分行)',s.body,'body',i,true));
     } else {
       f.appendChild(field('收尾文字(換行分行)',s.lines,'lines',i,true));
-      f.appendChild(field('互動提問',s.question,'question',i));
+      f.appendChild(field('互動提問(可按 Enter 自己換行)',s.question,'question',i,true,2));
     }
     card.appendChild(f);
+
+    /* 單頁重新生成 */
+    const rg=document.createElement('div'); rg.className='regen';
+    const ri=document.createElement('input'); ri.type='text';
+    ri.placeholder='這頁想怎麼改?例:語氣再輕鬆一點、改講面料、標題短一點(可留空直接重寫)';
+    const rb=document.createElement('button'); rb.className='btn btn-main btn-sm'; rb.textContent='重新生成這頁';
+    rb.addEventListener('click',()=>regenSlide(i,ri.value.trim(),rb));
+    ri.addEventListener('keydown',e=>{ if(e.key==='Enter') rb.click(); });
+    rg.appendChild(ri); rg.appendChild(rb);
+    card.appendChild(rg);
 
     const tools=document.createElement('div'); tools.className='tools';
     const fl=document.createElement('label'); fl.className='filebtn'; fl.textContent='上傳背景圖';
     const fi=document.createElement('input'); fi.type='file'; fi.accept='image/*'; fi.style.display='none';
-    fi.addEventListener('change',()=>{
+    const upState=document.createElement('span'); upState.className='upstate';
+    fi.addEventListener('change',async()=>{
       const file=fi.files[0]; if(!file) return;
+      let blob;
+      try{ blob=await compressImage(file); }catch(e){ upState.textContent=e.message; return; }
       const img=new Image();
       img.onload=()=>{ s.img=img; s.scale=100; s.ox=0; s.oy=0;
         ic.classList.remove('hidden'); syncRanges(); renderSlide(i); };
-      img.src=URL.createObjectURL(file);
+      img.src=URL.createObjectURL(blob);
+      const oldPath=s.imgPath;
+      s.imgUrl=null; s.imgPath=null;
+      if(cloudOK()){
+        upState.textContent='照片上傳雲端中…';
+        try{
+          const path='carousel/'+state.postId+'/'+uid()+'.jpg';
+          const ref=storage.ref(path);
+          await ref.put(blob,{contentType:'image/jpeg'});
+          s.imgUrl=await ref.getDownloadURL(); s.imgPath=path;
+          upState.textContent='照片已存雲端';
+          if(oldPath) storage.ref(oldPath).delete().catch(()=>{});
+          markDirty();
+        }catch(e){ console.error(e); upState.textContent='照片雲端儲存失敗(圖仍可使用)'; }
+      }
     });
     fl.appendChild(fi); tools.appendChild(fl);
 
     const rm=document.createElement('button'); rm.className='btn btn-sub btn-sm'; rm.textContent='移除圖';
-    rm.addEventListener('click',()=>{ s.img=null; ic.classList.add('hidden'); renderSlide(i); });
+    rm.addEventListener('click',()=>{
+      if(s.imgPath && cloudOK()) storage.ref(s.imgPath).delete().catch(()=>{});
+      s.img=null; s.imgUrl=null; s.imgPath=null; upState.textContent='';
+      ic.classList.add('hidden'); renderSlide(i); markDirty();
+    });
     tools.appendChild(rm);
 
     const dl=document.createElement('button'); dl.className='btn btn-main btn-sm'; dl.textContent='下載此頁';
     dl.addEventListener('click',()=>downloadSlide(i));
     tools.appendChild(dl);
+    tools.appendChild(upState);
     card.appendChild(tools);
 
     /* 圖片縮放 / 位置控制 */
-    const ic=document.createElement('div'); ic.className='imgctl'+(s.img?'':' hidden');
+    const ic=document.createElement('div'); ic.className='imgctl'+((s.img||s.imgUrl)?'':' hidden');
     let r1,r2,r3;
     ic.appendChild(r1=rangeRow('縮放',100,250,s.scale||100,v=>{ s.scale=v; renderSlide(i); }));
     ic.appendChild(r2=rangeRow('水平',-100,100,s.ox||0,v=>{ s.ox=v; renderSlide(i); }));
@@ -657,13 +813,15 @@ function buildEditor(){
 /* ================= 下載 ================= */
 function downloadSlide(i){
   const c=document.getElementById('cv'+i);
-  c.toBlob(blob=>{
-    const a=document.createElement('a');
-    a.href=URL.createObjectURL(blob);
-    a.download='vvpost_vol'+meta().vol+'_'+String(i+1).padStart(2,'0')+'.jpg';
-    a.click();
-    setTimeout(()=>URL.revokeObjectURL(a.href),3000);
-  },'image/jpeg',0.92);
+  try{
+    c.toBlob(blob=>{
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(blob);
+      a.download='vvpost_vol'+meta().vol+'_'+String(i+1).padStart(2,'0')+'.jpg';
+      a.click();
+      setTimeout(()=>URL.revokeObjectURL(a.href),3000);
+    },'image/jpeg',0.92);
+  }catch(e){ console.error(e); setStatus('下載失敗:照片跨網域限制,請重新上傳該頁照片再下載'); }
 }
 document.getElementById('dlAll').addEventListener('click',async()=>{
   for(let i=0;i<state.slides.length;i++){ downloadSlide(i); await new Promise(r=>setTimeout(r,450)); }
@@ -671,7 +829,7 @@ document.getElementById('dlAll').addEventListener('click',async()=>{
 document.getElementById('copyCap').addEventListener('click',()=>{
   navigator.clipboard.writeText(document.getElementById('caption').value).then(()=>setStatus('文案已複製'));
 });
-document.getElementById('caption').addEventListener('input',e=>state.caption=e.target.value);
+document.getElementById('caption').addEventListener('input',e=>{ state.caption=e.target.value; markDirty(); });
 
 /* ================= AI 生成 ================= */
 function setStatus(t){ document.getElementById('status').textContent=t; }
@@ -687,71 +845,253 @@ const HOOKS={
   share:'分享觸發型:封面或結尾放一句會讓人想 tag 朋友的話,情緒共鳴優先,結尾提問設計成適合在留言 tag 人的形式'
 };
 
+/* 固定寫作要求(使用者指定,原文照放) */
+const STYLE_RULE='請用繁體中文和台灣口語撰寫，用詞、語序和句型都要像真人平常說話。簡單直接，保留我的原意和語氣，不要空話、過度修飾、刻意對仗或硬加感性結尾，也不要為了口語化一直加語助詞。直接給我成品．不要破折號刪除號。';
+const BRAND_INTRO='你是台灣大尺碼女裝品牌 VV DOUBLE 的社群內容編輯。品牌 slogan 是「大尺碼不是特例,而是我的日常」,受眾是棉花糖女孩。請為 Instagram 知識型輪播貼文撰寫內容,目的是引流與收藏。';
+function baseRules(){
+  return '寫作要求:\n'+STYLE_RULE+'\n\n規則:\n'
+  + '1. 只回傳 JSON,不要任何其他文字、說明或 markdown 符號\n'
+  + '2. 嚴格禁止出現破折號「——」與刪除號,嚴格禁止提及任何其他品牌名稱\n'
+  + '3. 排版限制:每一行文字不超過 20 個中文字,body 與 lines 欄位用換行符號 \\n 分行\n'
+  + '4. 標題要短,每頁標題不超過 14 字;如果標題需要分兩行,在語意完整的地方用 \\n 斷開,不要把一個詞拆成兩半\n'
+  + '5. 條列式重點的行可以用「✓ 」開頭\n'
+  + '6. 標題或內文中最關鍵的造詞或概念,可以用「」框起來(排版會自動強調),每頁最多一組\n'
+  + '7. 反身材焦慮鐵則(最高優先):絕對不販賣身材焦慮。禁止把身材描述成問題、缺點或需要被解決的東西;禁止用恐懼或羞恥感當 hook;禁止出現「顯胖、遮肉、藏肉、修飾缺點、拯救身材、掰掰袖、穿錯很可怕」這類字眼;「顯瘦」不得當成主要賣點。一律改用正面框架:舒適、合身、自在、好活動、懂你的版型,核心觀念是衣服來配合人,不是人遷就衣服\n';
+}
 function buildPrompt(){
   const n=document.getElementById('pages').value;
   const topic=document.getElementById('topic').value.trim();
   const extra=document.getElementById('extra').value.trim();
   const hook=HOOKS[document.getElementById('hook').value];
-  return '你是台灣大尺碼女裝品牌 VV DOUBLE 的社群內容編輯。品牌 slogan 是「大尺碼不是特例,而是我的日常」,受眾是棉花糖女孩。請為 Instagram 知識型輪播貼文撰寫內容,目的是引流與收藏。\n\n'
+  return BRAND_INTRO+'\n\n'
   + '主題:' + topic + '\n'
   + (extra?('補充資料:'+extra+'\n'):'')
-  + '引流切角:' + hook + '\n'
-  + '\n規則:\n'
-  + '1. 只回傳 JSON,不要任何其他文字、說明或 markdown 符號\n'
-  + '2. 全部使用繁體中文(台灣用語),語氣口語、溫暖,像朋友在分享,不生硬\n'
-  + '3. 嚴格禁止出現破折號「——」,嚴格禁止提及任何其他品牌名稱\n'
-  + '4. 排版限制:每一行文字不超過 20 個中文字,body 與 lines 欄位用換行符號 \\n 分行\n'
-  + '5. 內文共 ' + n + ' 頁,每頁只講一個重點;每頁標題不超過 14 字;每頁 body 為 4 到 6 行\n'
-  + '6. 條列式重點的行可以用「✓ 」開頭\n'
-  + '7. 標題或內文中最關鍵的造詞或概念,可以用「」框起來(排版會自動強調),每頁最多一組\n'
-  + '8. caption 是 IG 發文文案,150 字內,口語有 hook,結尾附 5 個 hashtag,必含 #VVDOUBLE 與 #大尺碼不是特例\n'
-  + '9. 反身材焦慮鐵則(最高優先):絕對不販賣身材焦慮。禁止把身材描述成問題、缺點或需要被解決的東西;禁止用恐懼或羞恥感當 hook;禁止出現「顯胖、遮肉、藏肉、修飾缺點、拯救身材、掰掰袖、穿錯很可怕」這類字眼;「顯瘦」不得當成主要賣點。一律改用正面框架:舒適、合身、自在、好活動、懂你的版型,核心觀念是衣服來配合人,不是人遷就衣服\n\n'
+  + '引流切角:' + hook + '\n\n'
+  + baseRules()
+  + '8. 內文共 ' + n + ' 頁,每頁只講一個重點;每頁 body 為 4 到 6 行\n'
+  + '9. caption 是 IG 發文文案,150 字內,開頭要能吸引人往下看,結尾附 5 個 hashtag,必含 #VVDOUBLE 與 #大尺碼不是特例\n\n'
   + 'JSON 格式:\n'
   + '{"caption":"IG發文文案","cover":{"tag":"分類小標8字內","title1":"主標上行14字內","title2":"主標下行14字內","subtitle":"副標\\n可分兩行"},"slides":[{"title":"頁標題","body":"第一行\\n第二行\\n第三行\\n第四行"}],"ending":{"lines":"收尾文字\\n共3到5行","question":"結尾互動提問一句"}}';
 }
-
-async function generate(){
+/* 單頁重新生成:帶整份內容當上下文,只改指定那一頁 */
+function slideText(s,idx){
+  if(s.type==='cover') return 'P'+(idx+1)+' 封面|小標:'+(s.tag||'')+'|主標:'+(s.title1||'')+' / '+(s.title2||'')+'|副標:'+(s.subtitle||'').replace(/\n/g,' / ');
+  if(s.type==='ending') return 'P'+(idx+1)+' 結尾|收尾:'+(s.lines||'').replace(/\n/g,' / ')+'|提問:'+(s.question||'');
+  return 'P'+(idx+1)+' 內文|標題:'+(s.title||'')+'|內文:'+(s.body||'').replace(/\n/g,' / ');
+}
+function buildRegenPrompt(i,instr){
+  const s=state.slides[i];
+  const topic=document.getElementById('topic').value.trim();
+  const deck=state.slides.map((x,k)=>slideText(x,k)).join('\n');
+  const schema = s.type==='cover'
+    ? '{"tag":"分類小標8字內","title1":"主標上行14字內","title2":"主標下行14字內","subtitle":"副標\\n可分兩行"}'
+    : s.type==='ending'
+    ? '{"lines":"收尾文字\\n共3到5行","question":"結尾互動提問一句"}'
+    : '{"title":"頁標題","body":"第一行\\n第二行\\n第三行\\n第四行"}';
+  return BRAND_INTRO+'\n\n'
+  + (topic?('主題:'+topic+'\n'):'')
+  + '這是目前整份輪播貼文的內容:\n'+deck+'\n\n'
+  + '請只重寫第 '+(i+1)+' 頁('+(s.type==='cover'?'封面':s.type==='ending'?'結尾':'內文')+'),其他頁不要動。'
+  + '新的內容要跟前後頁銜接,也不要跟其他頁講重複的重點。\n'
+  + (instr?('修改指令:'+instr+'\n'):'修改指令:整頁重寫一個更好的版本\n')
+  + '\n'+baseRules()
+  + (s.type==='content'?'8. body 為 4 到 6 行\n':'')
+  + '\nJSON 格式(只回傳這一頁):\n'+schema;
+}
+async function callClaude(prompt,maxTokens){
   const key=document.getElementById('apikey').value.trim();
   if(key) sessionStorage.setItem('anthropic_api_key',key);
   const saved=sessionStorage.getItem('anthropic_api_key');
-  if(!saved){ setStatus('請先貼上 API Key'); return; }
+  if(!saved) throw new Error('請先貼上 API Key');
+  const headers=new Headers();
+  headers.append('Content-Type','application/json');
+  headers.append('x-api-key',saved);
+  headers.append('anthropic-version','2023-06-01');
+  headers.append('anthropic-dangerous-direct-browser-access','true');
+  const res=await fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',headers,
+    body:JSON.stringify({ model:MODEL, max_tokens:maxTokens||4000, messages:[{role:'user',content:prompt}] })
+  });
+  const data=await res.json();
+  if(data.error) throw new Error(data.error.message||'API 錯誤');
+  const text=(data.content||[]).filter(c=>c.type==='text').map(c=>c.text).join('\n');
+  const m=text.replace(/```json|```/g,'').match(/\{[\s\S]*\}/);
+  if(!m) throw new Error('AI 回傳格式不正確,請再試一次');
+  return JSON.parse(m[0]);
+}
+/* 保險:把破折號與刪除號拿掉 */
+function scrub(v){ return typeof v==='string' ? v.replace(/——|—|–|~~/g,',').replace(/[̶̵]/g,'') : v; }
+function scrubObj(o){ if(Array.isArray(o)) return o.map(scrubObj); if(o&&typeof o==='object'){ const r={}; for(const k in o) r[k]=scrubObj(o[k]); return r; } return scrub(o); }
+
+async function generate(){
   if(!document.getElementById('topic').value.trim()){ setStatus('請先填主題'); return; }
   const btn=document.getElementById('genBtn');
   btn.disabled=true; setStatus('AI 撰稿中,約 20 到 40 秒…');
   try{
-    const headers=new Headers();
-    headers.append('Content-Type','application/json');
-    headers.append('x-api-key',saved);
-    headers.append('anthropic-version','2023-06-01');
-    headers.append('anthropic-dangerous-direct-browser-access','true');
-    const res=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',headers,
-      body:JSON.stringify({ model:MODEL, max_tokens:4000, messages:[{role:'user',content:buildPrompt()}] })
-    });
-    const data=await res.json();
-    if(data.error) throw new Error(data.error.message||'API 錯誤');
-    const text=(data.content||[]).filter(c=>c.type==='text').map(c=>c.text).join('\n');
-    const clean=text.replace(/```json|```/g,'').trim();
-    const j=JSON.parse(clean);
+    const j=scrubObj(await callClaude(buildPrompt(),4000));
     applyResult(j);
-    setStatus('完成!往下捲動編輯與下載');
+    setStatus('完成!往下捲動編輯與下載(已自動存成雲端草稿)');
   }catch(err){
     console.error(err);
-    setStatus('失敗:'+err.message+'(可打開 console 看詳情)');
+    setStatus('失敗:'+err.message);
   }finally{
     btn.disabled=false;
   }
 }
+async function regenSlide(i,instr,btn){
+  const old=btn.textContent; btn.disabled=true; btn.textContent='生成中…';
+  try{
+    const j=scrubObj(await callClaude(buildRegenPrompt(i,instr),1500));
+    const s=state.slides[i];
+    const keys = s.type==='cover'?['tag','title1','title2','subtitle'] : s.type==='ending'?['lines','question'] : ['title','body'];
+    keys.forEach(k=>{ if(typeof j[k]==='string') s[k]=j[k]; });
+    buildEditor();
+    markDirty();
+    setStatus('第 '+(i+1)+' 頁已重新生成');
+  }catch(err){
+    console.error(err);
+    setStatus('第 '+(i+1)+' 頁重新生成失敗:'+err.message);
+    btn.disabled=false; btn.textContent=old;
+  }
+}
+function newSlide(o){ return Object.assign({img:null,imgUrl:null,imgPath:null,scale:100,ox:0,oy:0},o); }
 function applyResult(j){
   state.caption=j.caption||'';
   document.getElementById('caption').value=state.caption;
   state.slides=[];
-  state.slides.push({type:'cover',tag:j.cover.tag,title1:j.cover.title1,title2:j.cover.title2,subtitle:j.cover.subtitle,img:null,scale:100,ox:0,oy:0});
-  (j.slides||[]).forEach(s=>state.slides.push({type:'content',title:s.title,body:s.body,img:null,scale:100,ox:0,oy:0}));
-  state.slides.push({type:'ending',lines:j.ending.lines,question:j.ending.question,img:null,scale:100,ox:0,oy:0});
+  state.slides.push(newSlide({type:'cover',tag:j.cover.tag,title1:j.cover.title1,title2:j.cover.title2,subtitle:j.cover.subtitle}));
+  (j.slides||[]).forEach(s=>state.slides.push(newSlide({type:'content',title:s.title,body:s.body})));
+  state.slides.push(newSlide({type:'ending',lines:j.ending.lines,question:j.ending.question}));
+  state.postId=newId(); state.postStatus='draft'; state.createdAt=Date.now();
+  updateDoneBtn();
   buildEditor();
+  saveNow();
 }
 document.getElementById('genBtn').addEventListener('click',generate);
+
+/* ================= 雲端草稿與歷史(Firebase:vvdouble-storyboard) ================= */
+const firebaseConfig = {
+  apiKey: "AIzaSyDFP_pu6oWSFdKWF64J-0PDQCujRKlqiNs",
+  authDomain: "vvdouble-storyboard.firebaseapp.com",
+  databaseURL: "https://vvdouble-storyboard-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "vvdouble-storyboard",
+  storageBucket: "vvdouble-storyboard.firebasestorage.app",
+  messagingSenderId: "505264128604",
+  appId: "1:505264128604:web:ace4b7eaf550ddc9e3dc99"
+};
+let db=null, storage=null;
+try{
+  firebase.initializeApp(firebaseConfig);
+  db=firebase.database(); storage=firebase.storage();
+}catch(e){ console.error('Firebase 初始化失敗',e); }
+function cloudOK(){ return !!(db && storage && state.postId); }
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+function newId(){ return 'p'+uid(); }
+const SETTING_IDS=['topic','extra','hook','pages','vol','brand','sub','footerText','endFooterText'];
+function serialize(){
+  const settings={}; SETTING_IDS.forEach(id=>settings[id]=document.getElementById(id).value);
+  settings.tpl=state.tpl; settings.acc=state.acc;
+  const c=state.slides[0]||{};
+  const title=((c.title1||'')+' '+(c.title2||'')).replace(/\n/g,' ').trim()||'(未命名)';
+  return {
+    title, status:state.postStatus||'draft',
+    createdAt:state.createdAt||Date.now(), updatedAt:Date.now(),
+    settings, caption:state.caption||'',
+    slides:state.slides.map(s=>{
+      const o={}; for(const k in s){ if(k!=='img' && s[k]!==undefined) o[k]=s[k]; }
+      return o;
+    })
+  };
+}
+let saveTimer=null;
+function setCloud(t){ document.getElementById('cloudState').textContent=t; }
+function markDirty(){
+  if(!state.postId) return;
+  setCloud('有未儲存的修改…');
+  clearTimeout(saveTimer); saveTimer=setTimeout(saveNow,1500);
+}
+function saveNow(){
+  clearTimeout(saveTimer);
+  if(!db || !state.postId){ setCloud(db?'':'雲端未連線,內容只存在這個頁面'); return; }
+  db.ref('/carousel/posts/'+state.postId).set(serialize())
+    .then(()=>{ const d=new Date(); setCloud('已存到雲端 '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')); })
+    .catch(e=>{ console.error(e); setCloud('雲端儲存失敗:'+e.message); });
+}
+function updateDoneBtn(){
+  const b=document.getElementById('doneBtn');
+  b.textContent = state.postStatus==='done' ? '改回草稿' : '標記為完成';
+}
+document.getElementById('doneBtn').addEventListener('click',()=>{
+  state.postStatus = state.postStatus==='done' ? 'draft' : 'done';
+  updateDoneBtn(); saveNow();
+});
+document.getElementById('saveBtn').addEventListener('click',saveNow);
+document.getElementById('tplGrid').addEventListener('click',()=>markDirty());
+document.getElementById('accColor').addEventListener('input',()=>markDirty());
+SETTING_IDS.forEach(id=>{ document.getElementById(id).addEventListener('input',()=>markDirty()); document.getElementById(id).addEventListener('change',()=>markDirty()); });
+
+/* 歷史清單 */
+let histTab='draft', histData={};
+function fmtTime(t){ const d=new Date(t||0); return (d.getMonth()+1)+'/'+d.getDate()+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
+function renderHistory(){
+  const box=document.getElementById('histList'); box.innerHTML='';
+  const items=Object.entries(histData).filter(([,v])=>(v.status||'draft')===histTab).sort((a,b)=>(b[1].updatedAt||0)-(a[1].updatedAt||0));
+  document.getElementById('tabDraft').textContent='草稿 ('+Object.values(histData).filter(v=>(v.status||'draft')==='draft').length+')';
+  document.getElementById('tabDone').textContent='已完成 ('+Object.values(histData).filter(v=>v.status==='done').length+')';
+  if(!items.length){ box.innerHTML='<div class="hint">目前沒有'+(histTab==='done'?'已完成的內容':'草稿')+'</div>'; return; }
+  items.forEach(([id,v])=>{
+    const row=document.createElement('div'); row.className='hist-row'+(id===state.postId?' current':'');
+    const info=document.createElement('div'); info.className='hist-info';
+    const t=document.createElement('div'); t.className='hist-title'; t.textContent=v.title||'(未命名)';
+    const m=document.createElement('div'); m.className='hint';
+    const tplName=(THEMES[(v.settings||{}).tpl]||{}).name||'';
+    m.textContent=fmtTime(v.updatedAt)+' · '+((v.slides||[]).length)+' 頁 · '+tplName+((v.settings||{}).vol?' · VOL.'+v.settings.vol:'');
+    info.appendChild(t); info.appendChild(m);
+    const open=document.createElement('button'); open.className='btn btn-sub btn-sm'; open.textContent=id===state.postId?'編輯中':'開啟';
+    open.disabled = id===state.postId;
+    open.addEventListener('click',()=>loadPost(id,v));
+    const del=document.createElement('button'); del.className='btn btn-sub btn-sm'; del.textContent='刪除';
+    del.addEventListener('click',()=>deletePost(id,v,del));
+    row.appendChild(info); row.appendChild(open); row.appendChild(del);
+    box.appendChild(row);
+  });
+}
+document.getElementById('tabDraft').addEventListener('click',()=>{ histTab='draft'; document.getElementById('tabDraft').classList.add('on'); document.getElementById('tabDone').classList.remove('on'); renderHistory(); });
+document.getElementById('tabDone').addEventListener('click',()=>{ histTab='done'; document.getElementById('tabDone').classList.add('on'); document.getElementById('tabDraft').classList.remove('on'); renderHistory(); });
+if(db){
+  db.ref('/carousel/posts').orderByChild('updatedAt').limitToLast(200).on('value',snap=>{ histData=snap.val()||{}; renderHistory(); },
+    e=>{ document.getElementById('histList').innerHTML='<div class="hint">讀取雲端失敗:'+e.message+'</div>'; });
+}else{
+  document.getElementById('histList').innerHTML='<div class="hint">雲端未連線</div>';
+}
+function loadPost(id,v){
+  if(state.postId) saveNow();
+  const st=v.settings||{};
+  SETTING_IDS.forEach(k=>{ if(st[k]!==undefined) document.getElementById(k).value=st[k]; });
+  state.tpl=THEMES[st.tpl]?st.tpl:'A'; state.acc=st.acc||THEMES[state.tpl].acc;
+  document.getElementById('accColor').value=state.acc;
+  document.querySelectorAll('.tpl-item').forEach(el=>el.classList.toggle('active',el.dataset.key===state.tpl));
+  state.caption=v.caption||''; document.getElementById('caption').value=state.caption;
+  state.postId=id; state.postStatus=v.status||'draft'; state.createdAt=v.createdAt||Date.now();
+  state.slides=(v.slides||[]).map(s=>newSlide(Object.assign({},s,{img:null})));
+  updateDoneBtn();
+  buildEditor();
+  state.slides.forEach((s,i)=>{
+    if(!s.imgUrl) return;
+    const im=new Image(); im.crossOrigin='anonymous';
+    im.onload=()=>{ s.img=im; renderSlide(i); };
+    im.src=s.imgUrl;
+  });
+  setCloud('已開啟 '+fmtTime(v.updatedAt)+' 的版本');
+  renderHistory();
+  document.getElementById('result').scrollIntoView({behavior:'smooth'});
+}
+async function deletePost(id,v,btn){
+  if(btn.dataset.armed!=='1'){ btn.dataset.armed='1'; btn.textContent='再按一次確認刪除'; setTimeout(()=>{ btn.dataset.armed=''; btn.textContent='刪除'; },3000); return; }
+  (v.slides||[]).forEach(s=>{ if(s.imgPath && storage) storage.ref(s.imgPath).delete().catch(()=>{}); });
+  await db.ref('/carousel/posts/'+id).remove();
+  if(id===state.postId){ state.postId=null; setCloud('這份已從雲端刪除'); }
+}
 
 /* ================= 範例資料 ================= */
 document.getElementById('demoBtn').addEventListener('click',()=>{
