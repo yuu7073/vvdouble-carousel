@@ -80,8 +80,15 @@
   <div class="tagline">知識型引流貼文 · AI 撰稿 + 文字排版 · IG 4:5(1080×1350)</div>
 
   <div class="card">
-    <h2>1. API Key</h2>
-    <input type="password" id="apikey" placeholder="貼上 Anthropic API Key(只存在這個分頁,關閉即清除)">
+    <h2>1. AI 模型與 API Key</h2>
+    <label>使用哪個 AI</label>
+    <select id="provider">
+      <option value="claude">Claude(Sonnet 4.6)</option>
+      <option value="gpt-5.5">ChatGPT(GPT-5.5,品質優先)</option>
+      <option value="gpt-5.4-mini">ChatGPT(GPT-5.4 mini,便宜快速)</option>
+    </select>
+    <label id="keyLabel">API Key</label>
+    <input type="password" id="apikey" placeholder="">
   </div>
 
   <div class="card">
@@ -898,13 +905,53 @@ function buildRegenPrompt(i,instr){
   + (s.type==='content'?'8. body 為 4 到 6 行\n':'')
   + '\nJSON 格式(只回傳這一頁):\n'+schema;
 }
+/* ===== AI 供應商:Claude / ChatGPT,各自的 Key 分開存 ===== */
+function isGPT(p){ return p!=='claude'; }
+function keySlot(p){ return isGPT(p)?'openai_api_key':'anthropic_api_key'; }
+function getProvider(){ return document.getElementById('provider').value; }
+function syncKeyUI(){
+  const p=getProvider(), el=document.getElementById('apikey');
+  el.value=sessionStorage.getItem(keySlot(p))||'';
+  el.placeholder=isGPT(p)?'貼上 OpenAI API Key(sk- 開頭,只存在這個分頁,關閉即清除)':'貼上 Anthropic API Key(只存在這個分頁,關閉即清除)';
+  document.getElementById('keyLabel').textContent=isGPT(p)?'OpenAI API Key':'Anthropic API Key';
+}
+(function(){
+  const sel=document.getElementById('provider');
+  let last=null; try{ last=localStorage.getItem('vv_provider'); }catch(e){} if(last&&[...sel.options].some(o=>o.value===last)) sel.value=last;
+  sel.addEventListener('change',()=>{ try{ localStorage.setItem('vv_provider',sel.value); }catch(e){} syncKeyUI(); });
+  syncKeyUI();
+})();
+function parseJSONText(text){
+  const m=(text||'').replace(/```json|```/g,'').match(/\{[\s\S]*\}/);
+  if(!m) throw new Error('AI 回傳格式不正確,請再試一次');
+  return JSON.parse(m[0]);
+}
 async function callClaude(prompt,maxTokens){
+  const p=getProvider();
   const key=document.getElementById('apikey').value.trim();
-  if(key) sessionStorage.setItem('anthropic_api_key',key);
-  const saved=sessionStorage.getItem('anthropic_api_key');
-  if(!saved) throw new Error('請先貼上 API Key');
+  if(key) sessionStorage.setItem(keySlot(p),key);
+  const saved=sessionStorage.getItem(keySlot(p));
+  if(!saved) throw new Error('請先貼上 '+(isGPT(p)?'OpenAI':'Anthropic')+' API Key');
   const headers=new Headers();
   headers.append('Content-Type','application/json');
+  if(isGPT(p)){
+    headers.append('Authorization','Bearer '+saved);
+    const res=await fetch('https://api.openai.com/v1/chat/completions',{
+      method:'POST',headers,
+      body:JSON.stringify({
+        model:p,
+        messages:[{role:'user',content:prompt}],
+        response_format:{type:'json_object'},
+        reasoning_effort:'low',
+        max_completion_tokens:(maxTokens||4000)*3
+      })
+    });
+    const data=await res.json();
+    if(data.error) throw new Error(data.error.message||'API 錯誤');
+    const ch=(data.choices||[])[0]||{};
+    if(ch.finish_reason==='length') throw new Error('AI 回覆被截斷,請再試一次');
+    return parseJSONText(ch.message&&ch.message.content);
+  }
   headers.append('x-api-key',saved);
   headers.append('anthropic-version','2023-06-01');
   headers.append('anthropic-dangerous-direct-browser-access','true');
@@ -914,10 +961,7 @@ async function callClaude(prompt,maxTokens){
   });
   const data=await res.json();
   if(data.error) throw new Error(data.error.message||'API 錯誤');
-  const text=(data.content||[]).filter(c=>c.type==='text').map(c=>c.text).join('\n');
-  const m=text.replace(/```json|```/g,'').match(/\{[\s\S]*\}/);
-  if(!m) throw new Error('AI 回傳格式不正確,請再試一次');
-  return JSON.parse(m[0]);
+  return parseJSONText((data.content||[]).filter(c=>c.type==='text').map(c=>c.text).join('\n'));
 }
 /* 保險:把破折號與刪除號拿掉 */
 function scrub(v){ return typeof v==='string' ? v.replace(/——|—|–|~~/g,',').replace(/[̶̵]/g,'') : v; }
